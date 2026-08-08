@@ -1,0 +1,311 @@
+[
+  {
+    "slug": "inherited-house",
+    "name": "Inherited House",
+    "verb": "inherited a house",
+    "tier": 1,
+    "h1": "Sell an Inherited House Fast in {city}, {stateCode}",
+    "lede": "You inherited a house in {county} County and you do not live in it, do not want it, or cannot agree with the other heirs about it.",
+    "mechanics": "Before anything can be sold, the estate usually has to go through probate in {county} County. The court appoints an executor or administrator, and that person, not the heirs individually, signs the deed. If there are multiple heirs, every one of them typically has to sign off unless the will gave the executor power of sale.",
+    "cost": "Meanwhile the estate keeps paying: property taxes, insurance (which gets expensive once a carrier learns the house is vacant), utilities to keep pipes from freezing or mold from setting in, and yard maintenance so the county does not cite it.",
+    "whyCash": "We buy the house as it sits, including everything left inside. Nobody has to clean it out, sort through a lifetime of belongings, or make repairs an inspector flags. We have closed with executors, with multiple out-of-state heirs, and with attorneys handling the estate.",
+    "watchOut": "If probate has not been opened yet, we cannot close. We can still make the offer and hold it while the estate gets a personal representative appointed.",
+    "faqs": [
+      { "q": "Can I sell an inherited house in {city} before probate is finished?", "a": "Usually not. In {state} the estate needs a court-appointed executor or administrator with authority to sign the deed. What you can do is get the offer now and close once that appointment comes through. We hold our number while the estate catches up." },
+      { "q": "What if the other heirs disagree about selling?", "a": "Every heir with an ownership interest generally has to sign unless the will granted the executor an independent power of sale. A firm cash number often settles the argument, because heirs stop debating a hypothetical listing price and start looking at one real figure they can split." },
+      { "q": "Do I have to clean out the house first?", "a": "No. Leave the furniture, the clothes, the boxes in the attic, the car in the driveway. We handle removal after closing. Take what matters to you and leave the rest." },
+      { "q": "Will I owe taxes on an inherited house in {state}?", "a": "Inherited property generally receives a stepped-up cost basis to the fair market value on the date of death, which often means little or no capital gain if you sell soon after. {state} has no separate state estate tax. Confirm your own situation with a CPA, because we are not tax advisors." },
+      { "q": "The house is in {city} but I live out of state. Does that work?", "a": "Yes. Most inherited-property sellers we work with are out of state. Documents go out electronically and closing is handled by {closingPro}. You do not need to fly in." }
+    ]
+  },
+  {
+    "slug": "foreclosure",
+    "name": "Foreclosure",
+    "verb": "are facing foreclosure",
+    "tier": 1,
+    "h1": "Stop Foreclosure in {city}, {stateCode} — Sell Before the Sale Date",
+    "lede": "You got the notice, the sale date is real, and you need to know how much time you actually have in {state}.",
+    "mechanics": "{state} uses {foreclosureType}. {foreclosureSummary} {foreclosureSpeed}",
+    "cost": "{redemptionFact} {deadlineNote}",
+    "whyCash": "Selling before the sale date is almost always better than letting it run. You control the timing, you may walk away with equity instead of nothing, and the record shows a sale rather than a completed foreclosure. We can close in as little as 7 days when the calendar is tight, and we work directly with the lender's payoff department.",
+    "watchOut": "We are not attorneys and this is not legal advice. If the sale date is inside two weeks, call a {state} foreclosure attorney the same day you call us.",
+    "faqs": [
+      { "q": "How long do I have before the foreclosure sale in {city}?", "a": "{redemptionFact}" },
+      { "q": "Can I still sell my house if foreclosure has already started in {county} County?", "a": "Yes, right up until the sale is completed. The mortgage gets paid off out of the closing proceeds, the foreclosure is dismissed, and anything left over goes to you. What you cannot do is wait until after the gavel." },
+      { "q": "Will selling stop the damage to my credit?", "a": "A completed foreclosure is one of the most damaging entries on a credit report and generally stays for seven years. A sale that pays the loan off is reported as paid, not foreclosed. It does not erase the missed payments already reported, but it stops the bleeding." },
+      { "q": "What if I owe more than the house is worth?", "a": "That is a short sale, and it needs lender approval. We have negotiated them. They take longer than a normal cash close, usually 45 to 90 days depending on the servicer, so the earlier you start the better." },
+      { "q": "Do I get any money if I sell during foreclosure?", "a": "If the sale price exceeds the payoff plus liens, yes, the difference is yours at closing. If you let the auction happen instead, surplus funds do sometimes exist but recovering them means a separate claim process and often a fight." }
+    ]
+  },
+  {
+    "slug": "behind-on-property-taxes",
+    "name": "Behind on Property Taxes",
+    "verb": "are behind on property taxes",
+    "tier": 1,
+    "h1": "Behind on Property Taxes in {city}, {stateCode}? Sell Before the Tax Sale",
+    "lede": "Delinquent property taxes in {county} County do not just accrue interest. They eventually put the house on a tax sale list.",
+    "mechanics": "{taxSaleSummary} {taxSaleRedemption}",
+    "cost": "Unpaid taxes compound with penalties and interest, and once a tax sale happens the property is entangled with a purchaser who has legal rights to it. Untangling that costs more than the original bill.",
+    "whyCash": "Back taxes come out of the closing proceeds. You do not need cash up front to clear them. We pull the payoff from the {county} County tax commissioner, pay it at closing, and you keep whatever is left.",
+    "watchOut": "If a tax sale has already occurred, the situation is more complicated and the redemption clock matters. Tell us the sale date on your first call.",
+    "faqs": [
+      { "q": "Can I sell a house in {city} with back property taxes owed?", "a": "Yes. Delinquent taxes are a lien, and liens get paid off at closing out of the proceeds, the same way a mortgage does. You do not have to pay them first." },
+      { "q": "What happens if I do nothing about delinquent taxes in {county} County?", "a": "{taxSaleSummary} {taxSaleRedemption}" },
+      { "q": "How much do I actually owe?", "a": "The county tax commissioner or treasurer for {county} County can give you an exact payoff figure including penalties and interest through a specific date. We pull that same figure before we close, so nothing surprises either of us." },
+      { "q": "Will I still get money if the taxes eat into my equity?", "a": "It depends on the numbers. We will show you the math before you commit: offer price, minus the tax payoff, minus any mortgage, equals your check. If that number comes out negative we will tell you straight instead of wasting your time." }
+    ]
+  },
+  {
+    "slug": "tired-landlord",
+    "name": "Tired Landlord",
+    "verb": "are done being a landlord",
+    "tier": 1,
+    "h1": "Sell a Rental Property Fast in {city}, {stateCode} — Tenants and All",
+    "lede": "The rent is late again, the repair calls do not stop, and the property that was supposed to be passive income has turned into a second job.",
+    "mechanics": "Selling a tenant-occupied property on the open market is genuinely hard. Showings require tenant cooperation and legal notice, retail buyers usually want it vacant, and financed buyers' lenders may balk at the condition. Leases survive the sale, so a buyer inherits whatever agreement is in place.",
+    "cost": "Every month you hold it while trying to sell conventionally is another month of taxes, insurance, and whatever the tenant is or is not paying.",
+    "whyCash": "We buy occupied. No showings, no requiring your tenant to keep the place spotless, no eviction required before closing. We take the property with the lease in place and deal with the tenant relationship ourselves.",
+    "watchOut": "If you have deferred maintenance you have been putting off, say so. It changes our number, but finding it later changes it more.",
+    "faqs": [
+      { "q": "Can I sell my rental in {city} with tenants still living there?", "a": "Yes. We buy occupied properties regularly. The lease transfers with the property and we take over as landlord at closing. Your tenant does not need to move and does not need to allow showings." },
+      { "q": "What if my tenant has not paid rent in months?", "a": "That is common and it does not kill the deal. Non-paying tenants reduce what the property is worth to us because we absorb the cost of resolving it, but we will still make an offer rather than telling you to evict first." },
+      { "q": "Do I have to tell my tenant I am selling?", "a": "{state} landlord-tenant law and your lease govern the notice you owe. Generally you must notify the tenant of the change in ownership and where to send rent. We coordinate that with you at closing so nobody is blindsided." },
+      { "q": "What about the security deposit?", "a": "The deposit transfers to us at closing, normally as a credit on the settlement statement. That keeps you clean on your obligation to return it and makes us responsible going forward." }
+    ]
+  },
+  {
+    "slug": "divorce",
+    "name": "Divorce",
+    "verb": "are going through a divorce",
+    "tier": 1,
+    "h1": "Sell a House Fast During Divorce in {city}, {stateCode}",
+    "lede": "The house is usually the largest asset in the marriage and the one thing that cannot be split without selling it.",
+    "mechanics": "Both spouses on the deed generally have to sign. If a divorce decree or court order already directs the sale, that order controls, and closing will need a copy. {closingProCap} handles the disbursement so each side gets their share directly rather than one spouse handling the other's money.",
+    "cost": "A conventional listing means agreeing on a price, agreeing on a listing agent, agreeing on repairs, agreeing on which offer to take, and keeping the house showable through all of it. Every one of those is another thing to fight about.",
+    "whyCash": "One number, one closing date, no negotiation over repairs or staging. Proceeds split at the closing table. We have closed deals where the two spouses never sat in the same room.",
+    "watchOut": "If the divorce is contested and the court has not ruled on the house, we may need a signed order before we can close. Get us your attorney's contact and we will work with them.",
+    "faqs": [
+      { "q": "Do both spouses have to agree to sell the house in {state}?", "a": "If both names are on the deed, generally yes, unless a court order directs the sale. That order then substitutes for the reluctant spouse's cooperation. Your divorce attorney can tell you exactly where you stand." },
+      { "q": "How fast can we close in {city}?", "a": "As little as 7 days once we have clear title and both signatures. Most divorce closings we do run a bit longer, usually 2 to 4 weeks, because the attorneys need time to review the settlement statement." },
+      { "q": "How do the proceeds get split?", "a": "{closingProCap} disburses according to whatever you and your attorneys instruct in writing, or according to the court order. Two separate checks or wires, not one." },
+      { "q": "What if one spouse is still living in the house?", "a": "We can build a short post-closing occupancy period into the contract so the occupying spouse has time to move. We would rather set that up in writing than have it become a problem after closing." }
+    ]
+  },
+  {
+    "slug": "house-needs-repairs",
+    "name": "House That Needs Repairs",
+    "verb": "have a house that needs work",
+    "tier": 1,
+    "h1": "Sell a House That Needs Repairs in {city}, {stateCode} — As-Is, No Fixes",
+    "lede": "The estimates came back and the number is more than you have, or more than the house will ever return.",
+    "mechanics": "Conventional buyers use financed offers, and lenders send appraisers. An appraiser who notes an active leak, exposed wiring, or a failing roof can make the loan conditional on repairs being done before closing, which means you pay for them out of pocket while the buyer waits.",
+    "cost": "That is why so many listed fixer-uppers go under contract twice and fall through twice before the seller gives up.",
+    "whyCash": "We are the buyer and we are not borrowing, so no appraiser is deciding whether your house qualifies. We price the repairs into our offer and take on the work ourselves. Nothing gets fixed before closing.",
+    "watchOut": "Our offer reflects the condition. A house needing $60,000 of work is not going to fetch a retail number, and we will show you how we got to ours.",
+    "faqs": [
+      { "q": "Do I need to fix anything before selling in {city}?", "a": "No. Not the roof, not the HVAC, not the floors, not the smell. We buy in any condition and handle every repair after closing." },
+      { "q": "What if the house failed an inspection already?", "a": "Send us the inspection report. It actually helps. A real report means we can price accurately on the first pass instead of building a cushion into our number for the unknown." },
+      { "q": "How do you decide what to offer on a house needing work?", "a": "We estimate what the house is worth repaired in your {city} neighborhood, subtract our repair cost, subtract holding and closing costs, and subtract our margin. We will walk you through those four numbers so you can see the math rather than just the result." },
+      { "q": "Is there any repair too far gone?", "a": "Rarely. We have bought houses with fire damage, foundation failure, and full mold remediation ahead of them. If the structure is genuinely beyond saving, the land usually still has value." }
+    ]
+  },
+  {
+    "slug": "vacant-house",
+    "name": "Vacant House",
+    "verb": "own a vacant house",
+    "tier": 1,
+    "h1": "Sell a Vacant House Fast in {city}, {stateCode}",
+    "lede": "An empty house does not sit still. It deteriorates, and it costs you every month it stays empty.",
+    "mechanics": "Most homeowners insurance policies restrict or void coverage once a house has been vacant beyond 30 to 60 days. Replacing that with a vacant-property policy typically costs considerably more for less coverage. Meanwhile pipes, HVAC, and roofs fail without anyone there to notice.",
+    "cost": "Vacant houses also attract code enforcement in {city}, copper theft, squatters, and the kind of neighbor complaints that turn into liens.",
+    "whyCash": "We close fast, which is the only thing that actually stops the meter. No showings to coordinate from out of town, no need to turn the utilities back on for an inspection.",
+    "watchOut": "Check your policy today. If the carrier has already been notified the house is vacant, coverage may have lapsed and you may be carrying risk you do not know about.",
+    "faqs": [
+      { "q": "How fast can you buy a vacant house in {city}?", "a": "As little as 7 days from accepted offer, assuming title is clear. Vacant properties are often our fastest closings because there is no occupant to coordinate around." },
+      { "q": "Do the utilities need to be on?", "a": "No. We do not need power or water to make an offer or to close. If we want a closer look at the plumbing or electrical we will tell you and work around it." },
+      { "q": "What if the city has already cited the property?", "a": "Tell us the citation. Code violations in {city} are usually resolvable at or after closing, and unpaid fines can become liens that we pay from proceeds like any other lien." },
+      { "q": "The house has been empty for years. Is it too far gone?", "a": "Probably not. We have bought houses that sat empty a decade. Long vacancy means mold, rodents, and a failed roof more often than not, all of which we price in rather than ask you to fix." }
+    ]
+  },
+  {
+    "slug": "relocating",
+    "name": "Relocating",
+    "verb": "are relocating",
+    "tier": 2,
+    "h1": "Sell Your House Fast When Relocating From {city}, {stateCode}",
+    "lede": "You have a report date or a start date, and the house has to be handled before it.",
+    "mechanics": "The hard part of a relocation sale is the overlap. If the house has not sold when you leave, you are paying two housing costs and managing a listing from another time zone, and the pressure to accept a bad offer grows every month.",
+    "cost": "Carrying two mortgages is what turns a manageable move into a financial problem.",
+    "whyCash": "You pick the closing date. We can close before you leave, or set it after you have gone and handle it remotely. We have closed a lot of PCS moves on the military's timeline, not ours.",
+    "watchOut": "If you have a VA loan you may have options worth checking with your lender before selling outright.",
+    "faqs": [
+      { "q": "Can I close on my {city} house after I have already moved?", "a": "Yes. Closings are handled by {closingPro} and documents can be signed remotely or by mail. You do not have to fly back." },
+      { "q": "Can I pick my closing date?", "a": "Yes. Tell us the date that works with your move and we will build the contract around it, whether that is 7 days out or 60." },
+      { "q": "What if I need to stay in the house after closing?", "a": "We can write a post-closing occupancy agreement so you have time to finish the move after you get paid. Say so up front and we will build it in." },
+      { "q": "Is this a good option for a PCS move?", "a": "It is a common one, especially around {city}, where orders and closing dates rarely line up. The advantage is a certain date rather than hoping a financed buyer performs before your report date." }
+    ]
+  },
+  {
+    "slug": "fire-damage",
+    "name": "Fire Damaged House",
+    "verb": "have a fire damaged house",
+    "tier": 2,
+    "h1": "Sell a Fire Damaged House in {city}, {stateCode}",
+    "lede": "After a fire, the insurance settlement rarely covers a full rebuild, and the house is unsellable on the open market until it is repaired.",
+    "mechanics": "Fire damage is not only what burned. Smoke penetrates drywall and framing, and the water used to put the fire out causes its own damage and then mold. Retail buyers cannot get financing on a fire-damaged structure, so the buyer pool shrinks to cash investors.",
+    "cost": "Meanwhile your mortgage continues and your insurer may reduce or end additional living expense coverage on a schedule.",
+    "whyCash": "We buy fire-damaged houses as they stand. You can keep your insurance claim proceeds and sell us the structure, or assign the claim as part of the deal. Both happen; we will tell you which is better for your numbers.",
+    "watchOut": "Do not sign your claim over to a restoration contractor before you know what the house is worth as-is. Get our number first so you are comparing real options.",
+    "faqs": [
+      { "q": "Can I sell a fire damaged house in {city} without repairing it?", "a": "Yes. That is most of what we do with fire damage. No demo, no remediation, no rebuild. We take it in its current condition." },
+      { "q": "Do I keep my insurance payout if I sell?", "a": "Usually yes, depending on how your policy and mortgage are structured and whether the lender is a payee on the check. We will structure the deal around whichever path leaves you with more, and we will show you both." },
+      { "q": "What if only part of the house burned?", "a": "Partial fire damage is still difficult to sell retail because of smoke and water damage in the untouched areas. We price the whole structure, not just the burned rooms." },
+      { "q": "How long does a fire damage closing take?", "a": "Typically the same 7 to 28 days, with one caveat: if an open insurance claim needs to be resolved or released first, that can extend it." }
+    ]
+  },
+  {
+    "slug": "foundation-problems",
+    "name": "Foundation Problems",
+    "verb": "have foundation problems",
+    "tier": 2,
+    "h1": "Sell a House With Foundation Problems in {city}, {stateCode}",
+    "lede": "Cracked brick, doors that will not latch, sloping floors. Once a buyer's inspector writes the word foundation, most conventional deals die.",
+    "mechanics": "Foundation repair estimates in the Southeast commonly run from several thousand dollars for minor pier work into the tens of thousands for full underpinning. Lenders often require the repair be completed and certified by an engineer before they will fund, which puts the cost on you before you have been paid.",
+    "cost": "Expansive clay soils across much of the region and high water tables near the coast both drive this, and neither gets better with time.",
+    "whyCash": "We buy houses with active foundation movement. No engineer's report required, no repair before closing, no financing contingency to fail.",
+    "watchOut": "If you already have an engineer's report, send it. A documented problem prices better than an unknown one.",
+    "faqs": [
+      { "q": "Can I sell a house with foundation issues in {city}?", "a": "On the open market it is difficult, because most lenders will not fund until the foundation is repaired and certified. To a cash buyer it is straightforward. We buy the house with the problem intact." },
+      { "q": "Do I need an engineer's report first?", "a": "No. If you have one it helps us price accurately. If you do not, we will make our own assessment and factor a repair range into the offer." },
+      { "q": "How much does foundation repair cost around {city}?", "a": "It depends entirely on the cause and extent, and a real number requires a structural engineer. Ranges from minor pier work to full underpinning span an enormous distance, which is exactly why so many sellers stop and look for a cash buyer instead." },
+      { "q": "Will you lower your offer after you see it?", "a": "We give you a number after we understand the condition, not before. If we quote you a figure and nothing new turns up, that is the figure at closing." }
+    ]
+  },
+  {
+    "slug": "bad-roof",
+    "name": "House With a Bad Roof",
+    "verb": "have a house with a bad roof",
+    "tier": 2,
+    "h1": "Sell a House With a Bad Roof in {city}, {stateCode}",
+    "lede": "A failing roof is the single most common reason a financed sale falls apart in this region.",
+    "mechanics": "FHA and VA appraisers specifically look for remaining roof life, generally expecting at least two years. A roof that fails that test makes the loan conditional on replacement, and the seller usually ends up paying. Insurance carriers across the Southeast have also grown strict about roof age, and a buyer who cannot get a homeowners policy cannot close.",
+    "cost": "Heat, humidity, and named storms take roofs down faster here than in most of the country, which is why this comes up so often.",
+    "whyCash": "No appraiser, no insurance underwriter, no repair requirement. We replace the roof after we own it.",
+    "watchOut": "If the roof has been leaking a while, there is usually decking rot and sometimes mold underneath. We assume some of that; a lot of it changes the number.",
+    "faqs": [
+      { "q": "Do I have to replace the roof before selling in {city}?", "a": "Not to us. To a financed retail buyer, very likely yes, because FHA and VA appraisers look for remaining roof life and lenders make it a condition of funding." },
+      { "q": "The roof is leaking right now. Does that matter?", "a": "It matters for the price, not for whether we buy. Active leaks mean decking damage and often mold, so tell us how long it has been going on." },
+      { "q": "Can I file an insurance claim instead?", "a": "Sometimes, if the damage came from a covered event like a storm rather than age. Worth a call to your carrier before you sell. If the claim is denied because the roof simply wore out, that is when sellers usually call us." },
+      { "q": "What if I already have a roof estimate?", "a": "Send it. Same as with foundation work, a real contractor estimate lets us price the house tightly instead of building in a cushion for the unknown." }
+    ]
+  },
+  {
+    "slug": "hoarder-house",
+    "name": "Hoarder House",
+    "verb": "have a house full of belongings",
+    "tier": 3,
+    "h1": "Sell a Hoarder House in {city}, {stateCode} — We Clear It Out",
+    "lede": "The house is full, and the thought of emptying it is the reason nothing has happened for years.",
+    "mechanics": "Professional cleanout of a severely full house runs into thousands of dollars and multiple dumpster loads before an agent will even photograph it. Underneath, there is often pest damage, floor damage, and biohazard remediation nobody knew about.",
+    "cost": "Many hoarder-house situations also carry code enforcement attention, especially in {city} where exterior accumulation is visible from the street.",
+    "whyCash": "You do not clean, sort, haul, or donate anything. Take what you want and hand us the keys. We handle the rest after closing, and we do not photograph the inside or show it to anyone.",
+    "watchOut": "If there are family belongings you may want later, get them out before closing. Once we own it, the cleanout moves fast.",
+    "faqs": [
+      { "q": "Do I have to empty the house before selling?", "a": "No. Not a single box. Take what matters to you and leave everything else exactly where it is." },
+      { "q": "Will anyone see the inside?", "a": "One of us walks it to price it accurately. We do not list it, do not photograph it for marketing, and do not hold showings. There is no open house." },
+      { "q": "What if there is pest or biohazard contamination?", "a": "We have dealt with both. It affects the offer because remediation is expensive, but it does not stop us from buying." },
+      { "q": "How is this different from calling a junk removal company?", "a": "A cleanout company charges you thousands and leaves you with an empty house you still have to sell. We pay you and absorb the cleanout ourselves." }
+    ]
+  },
+  {
+    "slug": "behind-on-mortgage",
+    "name": "Behind on Mortgage Payments",
+    "verb": "are behind on the mortgage",
+    "tier": 2,
+    "h1": "Behind on Mortgage Payments in {city}, {stateCode}? Here Are Your Options",
+    "lede": "Missing payments starts a clock. Understanding where you are on it is the difference between choosing an outcome and having one handed to you.",
+    "mechanics": "Servicers generally report a missed payment at 30 days, refer the file to loss mitigation somewhere around 90, and begin the {foreclosureType} process in {state} after that. {foreclosureSpeed}",
+    "cost": "Each stage adds fees, and once attorney fees and costs are added to the payoff, catching up gets harder than the arrears alone suggest.",
+    "whyCash": "If you have equity, selling captures it. If you wait for the foreclosure, that equity generally disappears into fees and a below-market auction price.",
+    "watchOut": "Call your servicer's loss mitigation department before you decide anything. Forbearance or a modification may keep you in the house, and we would rather you keep it if you can.",
+    "faqs": [
+      { "q": "How many payments can I miss before foreclosure starts in {state}?", "a": "Federal servicing rules generally bar a servicer from making the first foreclosure filing until the loan is more than 120 days delinquent. After that, {state} uses {foreclosureType}. {foreclosureSpeed}" },
+      { "q": "Should I try a loan modification first?", "a": "If you want to keep the house and your income can support a modified payment, yes, absolutely try. Selling makes sense when the payment is not sustainable or the arrears are past catching up." },
+      { "q": "Can I sell if I am behind but not in foreclosure yet?", "a": "That is the best time to sell. More time, fewer fees added to the payoff, and more of your equity intact." },
+      { "q": "What happens to the missed payments at closing?", "a": "The full payoff, including arrears, fees, and per diem interest, is paid from the sale proceeds. Whatever remains after that and any other liens is yours." }
+    ]
+  },
+  {
+    "slug": "code-violations",
+    "name": "Code Violations",
+    "verb": "have code violations",
+    "tier": 3,
+    "h1": "Sell a House With Code Violations in {city}, {stateCode}",
+    "lede": "Citations from {city} code enforcement do not go away on their own, and unpaid fines can attach to the property as a lien.",
+    "mechanics": "Code cases typically escalate from a notice, to a fine, to a daily accruing penalty, to a lien, and in severe cases to a condemnation or demolition order with the cost billed back to the owner. Once a lien attaches, it has to be resolved before clear title can transfer.",
+    "cost": "Daily-accruing fines are the trap, because a small violation left alone for a year becomes a five-figure lien.",
+    "whyCash": "We buy properties with open code cases and unresolved violations. Liens are paid from proceeds at closing, and we take on the remediation the county wanted done.",
+    "watchOut": "If a demolition order has already been issued, timing is genuinely urgent. Tell us on the first call.",
+    "faqs": [
+      { "q": "Can I sell a house in {city} with open code violations?", "a": "Yes. Open violations and recorded liens both get handled at closing. Liens are paid from proceeds; open cases transfer with the property and become our problem to fix." },
+      { "q": "What if the fines are more than the house is worth?", "a": "Then the deal depends on whether the county will negotiate the lien down, which many will when a buyer commits to fixing the underlying problem. We have had those conversations before and we will have them for you." },
+      { "q": "The county says it may demolish it. Is it too late?", "a": "Not necessarily, but the window is short. A pending demolition order needs immediate attention, so call rather than fill out the form." },
+      { "q": "Does a condemned house have any value?", "a": "Often yes, in the lot. In much of {county} County an infill lot has real value even when the structure has none." }
+    ]
+  },
+  {
+    "slug": "title-problems",
+    "name": "Title Problems and Liens",
+    "verb": "have title problems",
+    "tier": 3,
+    "h1": "Sell a House With Title Problems or Liens in {city}, {stateCode}",
+    "lede": "The title search came back with something on it and the sale stalled.",
+    "mechanics": "Common ones: a judgment lien against a prior owner, a contractor's lien, an old mortgage never released, an unpaid HOA balance, a deceased co-owner never removed from the deed, or a boundary problem from an old survey. {closingProCap} has to clear these before title can transfer.",
+    "cost": "Retail buyers under a 30-day financing contract usually walk when a title problem surfaces, because their lock expires before it can be cured.",
+    "whyCash": "We are not on a lender's clock, so we can wait out a title cure that would kill a financed deal. Most liens simply get paid at closing from proceeds.",
+    "watchOut": "Heirs' property, where a deed was never updated after a death and ownership has split across a generation, is common in this region and takes the longest to resolve. Start early.",
+    "faqs": [
+      { "q": "Can I sell a house in {city} with a lien on it?", "a": "Yes. Most liens are paid off at closing out of the sale proceeds, exactly like a mortgage. You do not need to clear them beforehand." },
+      { "q": "What if my name is not on the deed?", "a": "Then we have to establish who has authority to convey. That usually means probate, an heirship affidavit, or a quiet title action depending on the facts. It is solvable, and we will help you find the right attorney." },
+      { "q": "What is heirs' property and why does it matter here?", "a": "It is property passed down without probate or a recorded deed, so ownership is split among many descendants, sometimes dozens. It is common across the Southeast. Selling requires either all owners signing or a court process, and it takes months rather than weeks." },
+      { "q": "Who pays to fix the title problem?", "a": "It depends on the problem. Payable liens come out of proceeds. If curing it needs an attorney, we will tell you up front who is absorbing that cost so it is not a surprise on the settlement statement." }
+    ]
+  },
+  {
+    "slug": "downsizing",
+    "name": "Downsizing or Fixed Income",
+    "verb": "are downsizing",
+    "tier": 3,
+    "h1": "Downsizing in {city}, {stateCode}? Sell Without Repairs or Showings",
+    "lede": "The house is bigger than you need, the upkeep has gotten hard, and the property tax bill keeps climbing on an income that does not.",
+    "mechanics": "Selling conventionally means repairs, decluttering, staging, and keeping the house showable for weeks, all before you are paid. For someone with mobility limits or a fixed income, the up-front cost of getting a house market-ready is often the barrier.",
+    "cost": "Rising insurance premiums across the Southeast have hit fixed-income homeowners hardest, and older homes draw the steepest increases.",
+    "whyCash": "No repairs, no staging, no strangers walking through, no money out of pocket. Pick your closing date so you are not out of one place before the next one is ready.",
+    "watchOut": "If you are considering a reverse mortgage instead, get independent counseling first. Compare it to a clean sale before deciding.",
+    "faqs": [
+      { "q": "Can I take my time moving out?", "a": "Yes. We build the closing date around your move, and if you need to stay after closing we can write that into the contract." },
+      { "q": "Do I need to clean or repair anything?", "a": "No. Take what you want to keep and leave the rest, including furniture. We handle the rest after closing." },
+      { "q": "Will I get less than listing with an agent?", "a": "Usually the offer is below full retail, yes. What you do not pay is the agent commission, closing costs, repair credits, or months of carrying costs. We show you both columns so you can compare the net, not the headline." },
+      { "q": "How do property taxes work if I sell mid-year in {county} County?", "a": "Property taxes are prorated at closing, so you pay only for the portion of the year you owned it. That proration appears on the settlement statement." }
+    ]
+  },
+  {
+    "slug": "storm-damage",
+    "name": "Storm or Hurricane Damage",
+    "verb": "have storm damage",
+    "tier": 3,
+    "states": ["GA", "FL", "SC", "AL", "NC"],
+    "h1": "Sell a Storm Damaged House in {city}, {stateCode}",
+    "lede": "After a named storm, contractors are booked, adjusters are backed up, and the repair timeline stretches past what you can carry.",
+    "mechanics": "The bottleneck after a major storm is not money, it is capacity. Roofers and remediation crews across the affected counties get booked for months, and materials lag. Meanwhile a tarped roof keeps taking water and mold sets in within days in this climate.",
+    "cost": "Insurance settlements on older roofs often come back at actual cash value rather than replacement cost, leaving a gap the owner has to fund.",
+    "whyCash": "We buy storm-damaged houses without waiting for a contractor to have an opening. You can keep the claim proceeds or fold them into the deal.",
+    "watchOut": "Be careful with assignment-of-benefits contracts pushed door to door after a storm. Read what you are signing before you sign it.",
+    "faqs": [
+      { "q": "Can I sell a hurricane damaged house in {city} before repairs?", "a": "Yes. We buy in current condition, tarps and all. No contractor needs to touch it first." },
+      { "q": "What happens to my insurance claim?", "a": "Depending on how your policy and any lender payee requirements are structured, you may keep the proceeds and sell the damaged structure, or we may take assignment of the claim as part of the price. We will lay out both and let you pick." },
+      { "q": "The adjuster has not come out yet. Should I wait?", "a": "Getting the adjuster's number first gives you more information, so if you can wait, do. If the house is deteriorating or you cannot carry it, we can move now." },
+      { "q": "Is flood damage different from wind damage?", "a": "Yes, substantially. Standard homeowners policies exclude flood, which is covered separately through NFIP or a private flood policy. Water that came up from the ground and water that came through the roof are treated very differently by insurers." }
+    ]
+  }
+]

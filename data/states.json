@@ -1,0 +1,161 @@
+[
+  {
+    "code": "GA",
+    "slug": "georgia",
+    "name": "Georgia",
+    "licensed": true,
+    "licenseNumber": "167853",
+    "home": true,
+    "closingType": "attorney",
+    "closingFact": "Georgia real estate closings are conducted under the supervision of a licensed Georgia attorney, not a title agent working alone.",
+    "foreclosure": {
+      "type": "Non-judicial (power of sale)",
+      "summary": "Almost every Georgia foreclosure is non-judicial. No judge signs off, and the sale happens on the courthouse steps on the first Tuesday of the month.",
+      "speed": "From the first missed payment to a completed auction can run as little as 60 days.",
+      "redemption": "There is no right of redemption after a non-judicial foreclosure sale in Georgia. The 12-month redemption people hear about applies only to judicial foreclosures, which are rare here.",
+      "redemptionDays": 0,
+      "deadlineNote": "Because there is no redemption after the gavel, the sale date is the real deadline. Once it passes, the house is gone."
+    },
+    "taxSale": {
+      "summary": "Georgia tax sales are separate from mortgage foreclosure and run on a different clock.",
+      "redemption": "A Georgia tax sale carries a 12-month right of redemption running from the sale date. You can reimburse the purchaser what they paid plus statutory premium and reclaim the property.",
+      "redemptionMonths": 12
+    },
+    "sources": [
+      { "label": "Georgia Foreclosure Laws (Nolo)", "url": "https://www.nolo.com/legal-encyclopedia/georgia-foreclosure-laws-procedures.html" },
+      { "label": "Right of Redemption, Athens-Clarke County", "url": "https://www.accgov.com/1717/Right-of-Redemption" }
+    ]
+  },
+  {
+    "code": "SC",
+    "slug": "south-carolina",
+    "name": "South Carolina",
+    "licensed": true,
+    "licenseNumber": "110921",
+    "home": false,
+    "closingType": "attorney",
+    "closingFact": "South Carolina requires a licensed South Carolina attorney to supervise the real estate closing.",
+    "foreclosure": {
+      "type": "Judicial",
+      "summary": "South Carolina foreclosures go through court, usually in front of a Master-in-Equity rather than a jury.",
+      "speed": "Court involvement makes this slower than Georgia. Months, not weeks.",
+      "redemption": "There is no statutory right of redemption after the sale in South Carolina. What exists instead is the upset bid window: if the lender preserved its right to a deficiency judgment, bidding stays open until the 30th day after the sale.",
+      "redemptionDays": 0,
+      "deadlineNote": "Many lenders waive the deficiency specifically to avoid that 30-day upset bid delay, which closes the window faster than owners expect."
+    },
+    "taxSale": {
+      "summary": "South Carolina delinquent tax sales are handled by the county Delinquent Tax Collector.",
+      "redemption": "South Carolina allows a 12-month redemption period after a delinquent property tax sale.",
+      "redemptionMonths": 12
+    },
+    "sources": [
+      { "label": "South Carolina Foreclosure Laws (Nolo)", "url": "https://www.nolo.com/legal-encyclopedia/south-carolina-foreclosure-laws-and-procedures.html" },
+      { "label": "S.C. Code 15-39-720, upset bids", "url": "https://law.justia.com/codes/south-carolina/title-15/chapter-39/section-15-39-720/" }
+    ]
+  },
+  {
+    "code": "FL",
+    "slug": "florida",
+    "name": "Florida",
+    "licensed": false,
+    "licenseNumber": null,
+    "home": false,
+    "closingType": "title",
+    "closingFact": "Florida closings are normally handled by a title company or a closing agent; an attorney is not required.",
+    "foreclosure": {
+      "type": "Judicial",
+      "summary": "Florida is a judicial foreclosure state. The lender files suit in circuit court and needs a judge's order before anything is sold.",
+      "speed": "Typically 8 months to 2 years. Uncontested files resolve in roughly 6 to 12 months from filing; contested ones stretch to 18 to 36 months.",
+      "redemption": "Florida gives no post-sale statutory right of redemption. Your right to redeem ends when the certificate of sale is filed.",
+      "redemptionDays": 0,
+      "deadlineNote": "The winning bidder gets a Certificate of Sale, then a 10-day objection period runs, then the Certificate of Title transfers ownership. Statute requires at least 20 days' notice before the sale."
+    },
+    "taxSale": {
+      "summary": "Florida counties sell tax certificates first, and only later can a certificate holder apply for a tax deed sale.",
+      "redemption": "A Florida owner can redeem by paying the certificate plus interest any time before the tax deed is sold.",
+      "redemptionMonths": 24
+    },
+    "sources": [
+      { "label": "Florida Foreclosure Process (Nolo)", "url": "https://www.nolo.com/legal-encyclopedia/florida-foreclosure-laws-procedures.html" }
+    ]
+  },
+  {
+    "code": "AL",
+    "slug": "alabama",
+    "name": "Alabama",
+    "licensed": false,
+    "licenseNumber": null,
+    "home": false,
+    "closingType": "title",
+    "closingFact": "Alabama closings are typically handled by a title company or closing attorney depending on the county's custom.",
+    "foreclosure": {
+      "type": "Non-judicial (most common)",
+      "summary": "Alabama permits both judicial and non-judicial foreclosure. Lenders almost always take the faster non-judicial route.",
+      "speed": "Non-judicial sales move quickly once notice is published.",
+      "redemption": "Alabama is unusual in the Southeast: owners generally keep a one-year right of redemption after the foreclosure sale. That drops to 180 days when the loan originated on or after January 1, 2016, a homestead exemption was claimed for the tax year of the sale, and the lender gave the required redemption notice at least 30 days before the sale.",
+      "redemptionDays": 365,
+      "deadlineNote": "That redemption right is real, but redeeming means paying the full sale price plus statutory charges. Most owners cannot, which is why selling before the sale usually nets more."
+    },
+    "taxSale": {
+      "summary": "Alabama sells tax liens and tax certificates through the county revenue commissioner or the state.",
+      "redemption": "Alabama allows a three-year administrative redemption period after a tax sale, with additional judicial redemption rights in some cases.",
+      "redemptionMonths": 36
+    },
+    "sources": [
+      { "label": "Alabama Right of Redemption (Nolo)", "url": "https://www.nolo.com/legal-encyclopedia/if-i-buy-home-foreclosure-sale-alabama-can-owners-later-redeem-the-house.html" },
+      { "label": "Alabama redemption period change (USFN)", "url": "https://www.usfn.org/blogpost/1296766/227682/Alabama-Redemption-Period-Shortened--New-Notice-Requirement" }
+    ]
+  },
+  {
+    "code": "NC",
+    "slug": "north-carolina",
+    "name": "North Carolina",
+    "licensed": false,
+    "licenseNumber": null,
+    "home": false,
+    "closingType": "attorney",
+    "closingFact": "North Carolina requires an attorney to handle the title work and closing.",
+    "foreclosure": {
+      "type": "Power of sale, court-authorized",
+      "summary": "North Carolina sits between judicial and non-judicial. A power of sale foreclosure cannot proceed until the Clerk of Superior Court in the property's county holds a hearing and authorizes it. The procedure is in Chapter 45, Article 2A of the General Statutes.",
+      "speed": "The clerk's hearing adds a scheduled, public step that Georgia and Tennessee do not have.",
+      "redemption": "There is no post-sale redemption period. Instead, a 10-day upset bid window runs after the sale, and every new upset bid restarts a fresh 10-day clock.",
+      "redemptionDays": 0,
+      "deadlineNote": "That upset bid mechanic means a North Carolina foreclosure sale is not final on sale day, and the timeline can extend repeatedly."
+    },
+    "taxSale": {
+      "summary": "North Carolina counties foreclose on tax liens through the courts rather than selling lien certificates.",
+      "redemption": "An owner can pay off the taxes and costs any time before the court confirms the sale.",
+      "redemptionMonths": 0
+    },
+    "sources": [
+      { "label": "Foreclosures, North Carolina Judicial Branch", "url": "https://www.nccourts.gov/help-topics/housing/foreclosures" }
+    ]
+  },
+  {
+    "code": "TN",
+    "slug": "tennessee",
+    "name": "Tennessee",
+    "licensed": false,
+    "licenseNumber": null,
+    "home": false,
+    "closingType": "title",
+    "closingFact": "Tennessee closings are usually handled by a title company or a closing attorney.",
+    "foreclosure": {
+      "type": "Non-judicial (trustee sale)",
+      "summary": "Tennessee foreclosures run through the power of sale clause in a deed of trust. A trustee, acting for the lender, sells the property without a lawsuit.",
+      "speed": "Non-judicial trustee sales are among the faster processes in the Southeast.",
+      "redemption": "Tennessee law provides a two-year right of redemption after the sale, but only if that right was not waived in the original deed of trust. In practice, most Tennessee deeds of trust waive it, so most owners have no redemption at all.",
+      "redemptionDays": 730,
+      "deadlineNote": "Deficiency judgments are allowed in Tennessee, so a short sale price can follow you after the house is gone."
+    },
+    "taxSale": {
+      "summary": "Tennessee tax sales are conducted through chancery court by the county trustee.",
+      "redemption": "Tennessee allows a redemption period after the court confirms a tax sale, commonly one year, shortened for longer-delinquent properties.",
+      "redemptionMonths": 12
+    },
+    "sources": [
+      { "label": "Tennessee Foreclosure Laws (Nolo)", "url": "https://www.nolo.com/legal-encyclopedia/summary-tennessees-foreclosure-laws.html" }
+    ]
+  }
+]

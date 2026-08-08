@@ -1,0 +1,58 @@
+{
+  "name": "Tossie Buys Houses",
+  "legalName": "Coastal GA Property Solutions, LLC",
+  "owner": "Tossie Griner",
+  "ownerTitle": "CEO and Founder",
+  "domain": "tossiebuyshouses.com",
+  "url": "https://tossiebuyshouses.com",
+  "phone": "1-912-380-3039",
+  "phoneE164": "+19123803039",
+  "phoneDisplay": "(912) 380-3039",
+  "email": "info@tossiebuyshouses.com",
+  "hq": {
+    "locality": "Savannah",
+    "region": "GA",
+    "country": "US"
+  },
+  "licenses": [
+    { "state": "GA", "label": "Georgia Real Estate License", "number": "167853" },
+    { "state": "SC", "label": "South Carolina Real Estate License", "number": "110921" }
+  ],
+  "social": {
+    "facebook": "https://www.facebook.com/tossiebuyshouses",
+    "instagram": "https://instagram.com/tossiebuys"
+  },
+  "brand": {
+    "navy": "#1a4485",
+    "navyDeep": "#12305e",
+    "navyInk": "#0d1f3c",
+    "coral": "#eb6a56",
+    "coralDeep": "#d14b36",
+    "ink": "#1c1c28",
+    "body": "#3e3e3e",
+    "muted": "#6a6a6a",
+    "line": "#e1e1e1",
+    "wash": "#f7f8fa",
+    "white": "#ffffff",
+    "gold": "#f0b429"
+  },
+  "logo": "/assets/img/tossie-logo.png",
+  "logoAlt": "Tossie Buys Houses",
+  "promise": {
+    "offerWindow": "24 hours",
+    "fastOfferWindow": "30 minutes",
+    "closeRangeDays": "7 to 28 days",
+    "fees": "no commissions, no fees, no closing costs to you",
+    "condition": "any condition"
+  },
+  "claimsVerified": {
+    "note": "Only claims sourced from tossiebuyshouses.com (live site, Aug 2026) appear on generated pages.",
+    "sourced": [
+      "Get A No-Obligation Cash Offer For Your House In As Little As 24 Hours",
+      "Cash Offer In 30 Minutes",
+      "We buy houses in ANY CONDITION",
+      "No commissions or fees; we handle closing costs",
+      "Closings possible within 7-28 days"
+    ]
+  }
+}
