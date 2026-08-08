@@ -194,7 +194,10 @@ footer.site a:hover{color:#fff}
   .colcloud{columns:1}
   .formcard{padding:22px}
   .row2{grid-template-columns:1fr}
-  .topbar .wrap{justify-content:center;gap:12px;font-size:.76rem}
+  /* the promise line can't fit next to the phone at this width — phone wins */
+  .topbar .wrap{justify-content:center;gap:0;font-size:.8rem;overflow:visible}
+  .topbar .wrap > span{display:none}
+  .topbar a{display:block;text-align:center;padding:2px 0}
 }
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
 </style>
