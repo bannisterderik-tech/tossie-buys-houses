@@ -17,6 +17,15 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # Job-level so BOTH the generator and the audit see the same config.
+    # Preview only: NOINDEX + PREVIEW keep this from competing with the live
+    # tossiebuyshouses.com in search. A real launch goes to Vercel on the real
+    # domain instead — do not just flip these off here.
+    env:
+      SITE_ORIGIN: https://bannisterderik-tech.github.io/tossie-buys-houses
+      BASE_PATH: /tossie-buys-houses
+      NOINDEX: '1'
+      PREVIEW: '1'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -24,14 +33,6 @@ jobs:
           node-version: '22'
       - name: Generate site
         run: node gen/build.mjs
-        env:
-          # Preview only. NOINDEX + PREVIEW keep this from competing with the
-          # live tossiebuyshouses.com in search. Do not remove for a real launch —
-          # a real launch goes to Vercel on the real domain instead.
-          SITE_ORIGIN: https://bannisterderik-tech.github.io/tossie-buys-houses
-          BASE_PATH: /tossie-buys-houses
-          NOINDEX: '1'
-          PREVIEW: '1'
       - name: Audit
         run: node scripts/verify.mjs
       - uses: actions/upload-pages-artifact@v3
