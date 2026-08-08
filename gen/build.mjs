@@ -23,6 +23,9 @@ const GUIDES = read('guides.json');
 
 const ORIGIN = process.env.SITE_ORIGIN || 'https://tossiebuyshouses.com';
 const NOINDEX = process.env.NOINDEX === '1';
+/** Subpath when hosted on a GitHub Pages project page, e.g. "/tossie-buys-houses". */
+const BASE = (process.env.BASE_PATH || '').replace(/\/$/, '');
+const PREVIEW = process.env.PREVIEW === '1';
 const SUPABASE_URL = process.env.SUPABASE_URL || '';
 const SUPABASE_ANON = process.env.SUPABASE_ANON_KEY || '';
 
@@ -276,10 +279,23 @@ const serviceLD = (name, desc, area) => ({
 /* ---------------------------------------------------------------- writer */
 const PAGES = [];
 function emit(url, html, priority = 0.7) {
+  if (PREVIEW) html = html.replace('<body>', '<body>' + previewBar());
+  if (BASE) {
+    html = html
+      .replace(/(href|src)="\//g, `$1="${BASE}/`)
+      .replace(/url\('\//g, `url('${BASE}/`)
+      .replace(/fetch\('\//g, `fetch('${BASE}/`);
+  }
   const dir = path.join(OUT, url);
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, 'index.html'), html);
   PAGES.push({ url, priority, hash: crypto.createHash('md5').update(html).digest('hex') });
+}
+
+function previewBar() {
+  return `<div style="background:#f0b429;color:#3a2c00;font:600 13px/1.4 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;padding:9px 16px;text-align:center;position:relative;z-index:200">
+<strong>Preview build \u2014 not the live site.</strong> Not indexed by search engines. Forms are not connected yet; call ${PHONE} to reach ${esc(BIZ.name)}.
+</div>`;
 }
 
 /* ================================================================= PAGES */
@@ -1048,6 +1064,7 @@ or broker in these transactions. Legal summaries on the site are general informa
 law, sourced on each page, and are not legal advice.
 `);
 
+fs.writeFileSync(path.join(OUT, '.nojekyll'), '');
 fs.writeFileSync(path.join(OUT, '_headers'), `/*\n  X-Content-Type-Options: nosniff\n  Referrer-Policy: strict-origin-when-cross-origin\n  X-Frame-Options: SAMEORIGIN\n  Permissions-Policy: geolocation=(), microphone=(), camera=()\n/assets/*\n  Cache-Control: public, max-age=31536000, immutable\n`);
 
 // copy static assets

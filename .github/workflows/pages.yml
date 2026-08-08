@@ -1,0 +1,49 @@
+name: Deploy preview to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Generate site
+        run: node gen/build.mjs
+        env:
+          # Preview only. NOINDEX + PREVIEW keep this from competing with the
+          # live tossiebuyshouses.com in search. Do not remove for a real launch —
+          # a real launch goes to Vercel on the real domain instead.
+          SITE_ORIGIN: https://bannisterderik-tech.github.io/tossie-buys-houses
+          BASE_PATH: /tossie-buys-houses
+          NOINDEX: '1'
+          PREVIEW: '1'
+      - name: Audit
+        run: node scripts/verify.mjs
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
