@@ -6,6 +6,9 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SITE = path.join(ROOT, 'site');
+// When built for a Pages project URL, hrefs carry a base prefix that page paths don't.
+const BASE = (process.env.BASE_PATH || '').replace(/\/$/, '');
+const unbase = (h) => (BASE && h.startsWith(BASE + '/') ? h.slice(BASE.length) : BASE && h === BASE ? '/' : h);
 const BAN = fs.readFileSync(path.join(ROOT, 'scripts', 'ban_list.txt'), 'utf8')
   .split('\n').map((s) => s.trim().toLowerCase()).filter(Boolean);
 
@@ -43,6 +46,7 @@ for (const f of files) {
   if (!title) add('blocker', `${url}: missing <title>`);
   if (!desc) add('blocker', `${url}: missing meta description`);
   if (!canon.endsWith(url)) add('major', `${url}: canonical mismatch -> ${canon}`);
+  if (BASE && !html.includes(`href="${BASE}/`)) add('blocker', `${url}: BASE_PATH set but links are not prefixed`);
   if (title.length > 65) add('minor', `${url}: title ${title.length} chars (>65)`);
   if (desc.length > 165) add('minor', `${url}: description ${desc.length} chars (>165)`);
   (titles.get(title) || titles.set(title, []).get(title)).push(url);
@@ -86,7 +90,8 @@ for (const f of files) {
 
   // --- internal links
   for (const [, href] of [...html.matchAll(/href="(\/[^"#?]*)"/g)]) {
-    const h = href.endsWith('/') || /\.[a-z]+$/.test(href) ? href : href + '/';
+    const raw = unbase(href);
+    const h = raw.endsWith('/') || /\.[a-z]+$/.test(raw) ? raw : raw + '/';
     if (/\.(xml|txt|png|jpg|jpeg|webp|svg|ico|css|js)$/.test(h)) continue;
     if (h.startsWith('/api/')) continue;
     if (!allUrls.has(h)) add('blocker', `${url}: broken internal link -> ${href}`);
@@ -101,7 +106,7 @@ for (const [u, n] of inbound) if (n === 0 && u !== '/') add('major', `orphan (0 
 
 // sitemap parity
 const sm = fs.readFileSync(path.join(SITE, 'sitemap.xml'), 'utf8');
-const smUrls = new Set([...sm.matchAll(/<loc>https?:\/\/[^/<]+([^<]*)<\/loc>/g)].map((m) => m[1]));
+const smUrls = new Set([...sm.matchAll(/<loc>https?:\/\/[^/<]+([^<]*)<\/loc>/g)].map((m) => unbase(m[1])));
 for (const u of allUrls) if (!smUrls.has(u)) add('major', `not in sitemap: ${u}`);
 for (const u of smUrls) if (!allUrls.has(u)) add('blocker', `sitemap lists missing page: ${u}`);
 
