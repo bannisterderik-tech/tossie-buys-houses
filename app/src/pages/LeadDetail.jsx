@@ -1,7 +1,14 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../supabase.js';
 import { navigate } from '../router.js';
-import { STATUSES, TEMPERATURES, titleize, formatPhone, fullAddress, fullDate, timeAgo } from '../lib/format.js';
+import InlineField from '../components/InlineField.jsx';
+import DispositionBar from '../components/DispositionBar.jsx';
+import {
+  STATUSES, TEMPERATURES, OCCUPANCY,
+  titleize, formatPhone, fullAddress, fullDate, timeAgo,
+} from '../lib/format.js';
+
+const money = (v) => `$${Number(v).toLocaleString()}`;
 
 export default function LeadDetail({ id }) {
   const [lead, setLead] = useState(null);
@@ -11,7 +18,7 @@ export default function LeadDetail({ id }) {
   const [err, setErr] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  async function load() {
+  const load = useCallback(async () => {
     const [l, a, n] = await Promise.all([
       supabase.from('leads').select('*').eq('id', id).single(),
       supabase.from('lead_activity').select('*').eq('lead_id', id).order('created_at', { ascending: false }),
@@ -22,20 +29,21 @@ export default function LeadDetail({ id }) {
     setActivity(a.data ?? []);
     setNotes(n.data ?? []);
     setLoading(false);
-  }
+  }, [id]);
 
-  useEffect(() => { setLoading(true); load(); /* eslint-disable-line */ }, [id]);
+  useEffect(() => { setLoading(true); load(); }, [load]);
 
-  async function patch(fields) {
+  const patch = useCallback(async (fields) => {
     setErr(null);
-    // Optimistic: the operator changing a dropdown should see it move now. The
-    // reload below is what makes it true, including the activity row the
-    // status trigger writes.
-    setLead((prev) => ({ ...prev, ...fields }));
+    setLead((prev) => ({ ...prev, ...fields }));   // optimistic
     const { error } = await supabase.from('leads').update(fields).eq('id', id);
     if (error) setErr(error.message);
-    load();
-  }
+    load();                                        // truth, plus any activity the triggers wrote
+  }, [id, load]);
+
+  // Numbers arrive from inputs as strings; the columns are integers.
+  const patchNumber = (field) => (v) =>
+    patch({ [field]: v === null ? null : Number(String(v).replace(/[^\d.-]/g, '')) || null });
 
   async function addNote(e) {
     e.preventDefault();
@@ -56,6 +64,9 @@ export default function LeadDetail({ id }) {
   if (!lead) return <div className="empty"><strong>Lead not found</strong><a href="/app">Back to leads</a></div>;
 
   const phone = lead.phone || lead.phone_mobile;
+  const dialable =
+    !lead.is_dnc && !lead.is_litigator && !lead.phone_invalid && Boolean(phone) &&
+    ((lead.source === 'website' && lead.tcpa_opt_in) || (lead.skip_traced && lead.dnc_scrubbed));
 
   return (
     <>
@@ -68,7 +79,15 @@ export default function LeadDetail({ id }) {
 
       <div className="toolbar">
         <button className="btn ghost" onClick={() => navigate('/')}>← All leads</button>
-        {phone && <a className="btn" href={`tel:${phone.replace(/[^\d+]/g, '')}`}>Call {formatPhone(phone)}</a>}
+        {phone && dialable && (
+          <a className="btn" href={`tel:${phone.replace(/[^\d+]/g, '')}`}>Call {formatPhone(phone)}</a>
+        )}
+        {phone && !dialable && (
+          <span className="badge stop" style={{ alignSelf: 'center' }}>
+            Do not call — {lead.is_dnc ? 'on DNC' : lead.is_litigator ? 'known litigator'
+              : lead.phone_invalid ? 'wrong number' : 'not scrubbed'}
+          </span>
+        )}
         <select value={lead.status} onChange={(e) => patch({ status: e.target.value })}>
           {STATUSES.map((s) => <option key={s} value={s}>{titleize(s)}</option>)}
         </select>
@@ -77,21 +96,52 @@ export default function LeadDetail({ id }) {
         </select>
       </div>
 
+      <div className="card">
+        <h2>Log a call</h2>
+        <div className="body">
+          <DispositionBar leadId={id} onDone={load} />
+        </div>
+      </div>
+
       <div className="detail">
         <div>
           <div className="card">
             <h2>Seller</h2>
             <div className="body">
-              <dl className="facts">
-                <dt>Name</dt><dd>{lead.name || lead.owner_name || '—'}</dd>
-                <dt>Phone</dt><dd>{formatPhone(phone) || '—'}</dd>
-                <dt>Email</dt><dd>{lead.email || '—'}</dd>
-                <dt>Motivation</dt><dd>{titleize(lead.motivation) || '—'}</dd>
-                <dt>Timeline</dt><dd>{lead.timeline || '—'}</dd>
-                <dt>Occupancy</dt><dd>{titleize(lead.occupancy) || '—'}</dd>
-                <dt>Asking</dt><dd>{lead.asking_price ? `$${lead.asking_price.toLocaleString()}` : '—'}</dd>
-                <dt>Condition</dt><dd>{lead.condition_notes || '—'}</dd>
+              <dl className="facts editable">
+                <InlineField label="Name"   value={lead.name}  onSave={(v) => patch({ name: v })} />
+                <InlineField label="Phone"  value={lead.phone} onSave={(v) => patch({ phone: v })} format={formatPhone} />
+                <InlineField label="Email"  value={lead.email} onSave={(v) => patch({ email: v })} type="email" />
+                <InlineField label="Second contact" value={lead.co_contact_name} onSave={(v) => patch({ co_contact_name: v })} placeholder="spouse, sibling, executor…" />
               </dl>
+            </div>
+          </div>
+
+          <div className="card">
+            <h2>Qualifying</h2>
+            <p className="cardnote">
+              The answers that decide whether this is a deal. Click any value to edit.
+            </p>
+            <div className="body">
+              <dl className="facts editable">
+                <InlineField label="Motivation" value={lead.motivation} onSave={(v) => patch({ motivation: v })} placeholder="why are they selling?" />
+                <InlineField label="Timeline"   value={lead.timeline}   onSave={(v) => patch({ timeline: v })} placeholder="how fast do they need out?" />
+                <InlineField label="Occupancy"  value={lead.occupancy}  onSave={(v) => patch({ occupancy: v })} options={OCCUPANCY} />
+                <InlineField label="Condition"  value={lead.condition_notes} onSave={(v) => patch({ condition_notes: v })} type="textarea" placeholder="roof, HVAC, foundation, what they volunteered" />
+                <InlineField label="Asking"     value={lead.asking_price}  onSave={patchNumber('asking_price')}  format={money} placeholder="what do they want?" />
+                <InlineField label="ARV est."   value={lead.arv_estimate}  onSave={patchNumber('arv_estimate')}  format={money} />
+                <InlineField label="Repairs est." value={lead.repair_estimate} onSave={patchNumber('repair_estimate')} format={money} />
+                <InlineField label="Mortgage"   value={lead.mortgage_balance} onSave={patchNumber('mortgage_balance')} format={money} />
+              </dl>
+
+              <div className="flags">
+                <Flag label="Already listed with an agent" on={lead.already_listed}
+                      onChange={(v) => patch({ already_listed: v })} />
+                <Flag label="Under contract with someone else" on={lead.under_contract_elsewhere}
+                      onChange={(v) => patch({ under_contract_elsewhere: v })} />
+                <Flag label="Liens or back taxes" on={lead.has_liens}
+                      onChange={(v) => patch({ has_liens: v })} />
+              </div>
             </div>
           </div>
 
@@ -131,22 +181,24 @@ export default function LeadDetail({ id }) {
               <dl className="facts">
                 <dt>Dialable</dt>
                 <dd>
-                  {/* Mirrors lead_is_dialable() in the schema. The database is the
-                      enforcement point; this is only the readout. */}
-                  {lead.is_dnc || lead.is_litigator ? (
-                    <span className="badge stop">{lead.is_litigator ? 'Litigator' : 'On DNC'}</span>
-                  ) : (lead.source === 'website' && lead.tcpa_opt_in) || (lead.skip_traced && lead.dnc_scrubbed) ? (
-                    <span className="badge ok">Yes</span>
-                  ) : (
-                    <span className="badge stop">Not scrubbed</span>
+                  {/* Mirrors lead_is_dialable(). The database is the enforcement
+                      point; this is only the readout. */}
+                  {dialable ? <span className="badge ok">Yes</span> : (
+                    <span className="badge stop">
+                      {lead.is_dnc ? 'On DNC'
+                        : lead.is_litigator ? 'Litigator'
+                        : lead.phone_invalid ? 'Wrong number'
+                        : !phone ? 'No number'
+                        : 'Not scrubbed'}
+                    </span>
                   )}
                 </dd>
-                <dt>TCPA opt-in</dt>
-                <dd>{lead.tcpa_opt_in ? fullDate(lead.tcpa_opt_in_at) : 'No'}</dd>
+                <dt>Attempts</dt><dd>{lead.call_attempts}</dd>
+                <dt>Last contact</dt><dd>{lead.last_contacted_at ? timeAgo(lead.last_contacted_at) : 'never'}</dd>
+                <dt>Next follow-up</dt><dd>{lead.next_follow_up_at ? fullDate(lead.next_follow_up_at) : '—'}</dd>
+                <dt>TCPA opt-in</dt><dd>{lead.tcpa_opt_in ? fullDate(lead.tcpa_opt_in_at) : 'No'}</dd>
                 <dt>Consent</dt>
-                <dd>
-                  {[lead.consent_sms && 'SMS', lead.consent_email && 'Email'].filter(Boolean).join(' · ') || 'None'}
-                </dd>
+                <dd>{[lead.consent_sms && 'SMS', lead.consent_email && 'Email'].filter(Boolean).join(' · ') || 'None'}</dd>
                 <dt>Skip traced</dt><dd>{lead.skip_traced ? fullDate(lead.skip_traced_at) : 'No'}</dd>
                 <dt>DNC scrubbed</dt><dd>{lead.dnc_scrubbed ? fullDate(lead.dnc_scrubbed_at) : 'No'}</dd>
               </dl>
@@ -193,5 +245,14 @@ export default function LeadDetail({ id }) {
         </div>
       </div>
     </>
+  );
+}
+
+function Flag({ label, on, onChange }) {
+  return (
+    <label className="flag">
+      <input type="checkbox" checked={Boolean(on)} onChange={(e) => onChange(e.target.checked)} />
+      {label}
+    </label>
   );
 }

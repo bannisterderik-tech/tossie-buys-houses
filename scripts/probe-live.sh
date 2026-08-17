@@ -50,8 +50,13 @@ probe 'read lead notes'           GET  '/rest/v1/lead_notes?select=body'
 probe 'read the activity log'     GET  '/rest/v1/lead_activity?select=*'
 probe 'inject a lead'             POST '/rest/v1/leads' \
       "{\"team_id\":\"$TEAM\",\"name\":\"probe\",\"phone\":\"9125550000\"}"
+probe 'read the due queue'        GET  '/rest/v1/due_leads?select=*'
 probe 'call the signup trigger'   POST '/rest/v1/rpc/handle_new_user' '{}'
 probe 'call the pipeline trigger' POST '/rest/v1/rpc/place_new_lead_on_pipeline' '{}'
+probe 'log a disposition'         POST '/rest/v1/rpc/log_disposition' \
+      '{"p_lead_id":"00000000-0000-4000-8000-000000000000","p_outcome":"no_answer"}'
+probe 'move a board card'         POST '/rest/v1/rpc/move_lead_to_stage' \
+      '{"p_lead_id":"00000000-0000-4000-8000-000000000000","p_stage_id":"00000000-0000-4000-8000-000000000000"}'
 
 if [ $fail -eq 0 ]; then
   echo "▸ all probes denied"

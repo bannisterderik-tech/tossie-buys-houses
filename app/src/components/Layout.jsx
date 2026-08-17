@@ -2,6 +2,7 @@ import { supabase } from '../supabase.js';
 import { useRoute } from '../router.js';
 
 const NAV = [
+  { to: '/today', label: 'Today' },
   { to: '/', label: 'Leads' },
   { to: '/board', label: 'Board' },
 ];
@@ -41,6 +42,8 @@ export default function Layout({ session, children }) {
             </span>
           ))}
         </nav>
+
+        <a href="/app/leads/new" className="btn newlead">+ New lead</a>
 
         <div className="spacer" />
 

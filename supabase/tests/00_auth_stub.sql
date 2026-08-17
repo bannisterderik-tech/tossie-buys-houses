@@ -22,6 +22,13 @@ CREATE ROLE authenticated;
 CREATE ROLE anon;
 CREATE ROLE service_role;
 
+-- Supabase grants these; without them any SECURITY INVOKER function that calls
+-- auth.uid() fails with "permission denied for schema auth" — which is a gap in
+-- this stub, not in the migration under test.
+GRANT USAGE ON SCHEMA auth TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION auth.uid() TO anon, authenticated, service_role;
+GRANT SELECT ON auth.users TO service_role;
+
 -- Supabase ships this publication; realtime subscriptions read from it. The
 -- hardening migration adds tables to it, so it has to exist here too or that
 -- migration would be silently untested.

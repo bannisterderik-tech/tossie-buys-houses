@@ -6,6 +6,8 @@ import Layout from './components/Layout.jsx';
 import LeadsPage from './pages/LeadsPage.jsx';
 import LeadDetail from './pages/LeadDetail.jsx';
 import BoardPage from './pages/BoardPage.jsx';
+import NewLeadPage from './pages/NewLeadPage.jsx';
+import TodayPage from './pages/TodayPage.jsx';
 
 export default function App() {
   const [session, setSession] = useState(null);
@@ -31,7 +33,12 @@ export default function App() {
 
   return (
     <Layout session={session}>
-      {leadId ? <LeadDetail id={leadId} />
+      {/* /leads/new is checked before the :id route so "new" is never read as
+          a lead id — matchLeadId only accepts a UUID, but the order documents
+          the intent for whoever adds the next route. */}
+      {path === '/leads/new' ? <NewLeadPage />
+        : leadId ? <LeadDetail id={leadId} />
+        : path === '/today' ? <TodayPage />
         : path === '/board' ? <BoardPage />
         : path === '/' ? <LeadsPage />
         : <NotFound path={path} />}
