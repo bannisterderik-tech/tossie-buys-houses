@@ -50,6 +50,33 @@ check 'app deep route: a lead'  '/app/leads/70551e00-0000-4000-8000-000000000099
 contains 'deep route serves the SPA shell' '/app/today/' 'id="root"'
 contains 'robots disallows /app'           '/robots.txt' 'Disallow: /app/'
 
+# The website form POSTs to /api/lead. trailingSlash:true 308s that to
+# /api/lead/, which a browser fetch follows with the method and body intact —
+# but it is worth asserting, because a broken lead endpoint is invisible: the
+# form would show its success message and the lead would be gone.
+echo "▸ lead capture"
+post() {
+  local label="$1" body="$2" expect="$3"
+  local code
+  code=$(curl -s -o /dev/null -w '%{http_code}' -L --max-time 15 -X POST "$BASE/api/lead" \
+         -H 'Content-Type: application/json' -d "$body")
+  if [ "$code" = "$expect" ]; then
+    printf '  ✓ %s   %s\n' "$code" "$label"
+  else
+    printf '  \033[31m✗ %s (want %s)  %s\033[0m\n' "$code" "$expect" "$label"
+    fail=1
+  fi
+}
+
+post 'accepts a valid lead' \
+     '{"address":"1 Probe St, Savannah, GA 31401","name":"Deploy Probe","phone":"9125550000","email":"probe@example.com"}' 200
+post 'rejects a bad email' \
+     '{"address":"1 Probe St","name":"X","phone":"9125550000","email":"nope"}' 400
+post 'rejects a short phone' \
+     '{"address":"1 Probe St","name":"X","phone":"123","email":"x@example.com"}' 400
+post 'swallows a honeypot hit' \
+     '{"address":"1 Probe St","name":"X","phone":"9125550000","email":"x@example.com","company":"spam"}' 200
+
 echo "▸ headers on /app"
 curl -s -D- -o /dev/null -L --max-time 15 "$BASE/app/" \
   | grep -iE 'x-robots-tag|x-frame-options|cache-control' | sed 's/^/  /'

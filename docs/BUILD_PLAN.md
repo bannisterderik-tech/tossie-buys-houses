@@ -261,12 +261,24 @@ against the real project and all now fixed and asserted:
   between the public browser key and seller PII. Revoked, plus default
   privileges so future tables inherit the lockdown.
 
-**A fourth found only by deploying.** `cleanUrls: true` turns the SPA rewrite
-destination `/app/index.html` into a 308 back to `/app/`, so the rewrite served
-nothing and every deep route 404'd — including the `/app/leads/<id>` link that
-goes in every new-lead alert email. `/app/` itself worked, which is why it
-looked fine. Destination is now `/app/`; `scripts/probe-deploy.sh` guards it,
-because `cleanUrls` exists only on Vercel and nothing local reproduces it.
+**A fourth found only by deploying**, and it took two wrong guesses to pin down
+because two settings were conspiring:
+
+- `cleanUrls: true` turned the rewrite destination `/app/index.html` into a 308
+  back to `/app/`, so the rewrite served nothing. It turned out `cleanUrls` was
+  doing no useful work at all — every one of the 680 generated pages is
+  `dir/index.html`, so there are zero non-index `.html` files for it to clean.
+  Removed.
+- The rewrite source `/app/:path*` does not match `/app/today/` once
+  `trailingSlash: true` has appended the slash. `(.*)` does.
+
+Symptom of both: `/app/` worked and every deep route 404'd — `/app/today/`,
+`/app/board/`, and the `/app/leads/<id>` link that goes in every new-lead alert
+email. It looked fine on the one URL anybody checks first.
+
+`scripts/probe-deploy.sh` guards all of it against a live URL, including that
+`POST /api/lead` survives the trailing-slash 308 with its body intact. None of
+this reproduces locally — `cleanUrls` and `trailingSlash` exist only on Vercel.
 
 ### Dashboard settings that no API can reach
 
