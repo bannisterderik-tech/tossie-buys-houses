@@ -5,7 +5,7 @@
   "cleanUrls": true,
   "trailingSlash": true,
   "rewrites": [
-    { "source": "/app/(.*)", "destination": "/app/index.html" }
+    { "source": "/app/:path*", "destination": "/app/" }
   ],
   "headers": [
     {
