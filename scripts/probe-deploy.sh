@@ -40,7 +40,7 @@ contains() {
 echo "▸ probing $BASE"
 
 check 'marketing home'          '/'                     200
-check 'a generated city page'   '/sell-my-house-fast/savannah-ga/' 200
+check 'a generated city page'   '/sell-my-house-fast/georgia/brunswick/' 200
 check 'app shell'               '/app/'                 200
 check 'app deep route: today'   '/app/today/'           200
 check 'app deep route: board'   '/app/board/'           200

@@ -208,15 +208,25 @@ tests in `supabase/tests/`, operator app in `app/`.
 | API URL | `https://fvkxdhuwfjnsvkjjordm.supabase.co` |
 | Team UUID | `70551e00-0000-4000-8000-000000000001` |
 | Migrations applied | 4 |
-| Vercel | team `team_KKsStWMGNjKgymYlx2t3KoZf`, **project not yet created** — Vercel needs a GitHub Login Connection before it can link the repo |
+| Vercel project | `tossie-buys-houses` — `prj_2FtZY41N9wPTUmy5TOPsYtDDCm6D`, production branch `main` |
+| Live | https://tossie-buys-houses.vercel.app (marketing site + `/app`) |
+| Auth | magic link only, gated by `allowed_signups` |
 
 Three commands, none of which need an account:
 
 ```
-npm test                  # 16 endpoint + 20 database assertions
-./scripts/db-test.sh      # throwaway Postgres, applies every migration
-./scripts/probe-live.sh   # asks the attacker's question of a live project
+npm test                   # 16 endpoint + 46 database assertions
+./scripts/db-test.sh       # throwaway Postgres, applies every migration
+./scripts/probe-live.sh    # asks the attacker's question of a live project
+./scripts/probe-deploy.sh  # checks a live deployment serves its deep routes
 ```
+
+**Auth is magic link, and there is no password anywhere in the system.** The
+catch is that magic link needs `shouldCreateUser: true` to be usable, and that
+would otherwise let anyone who finds `/app` seat themselves on Tossie's team.
+`allowed_signups` plus a BEFORE INSERT trigger on `auth.users` is what makes it
+safe — enforced in the database, so it holds against the app, curl, or a future
+SDK call that forgets to check. Onboarding someone is one row in that table.
 
 Four decisions made while building that the rest of the plan depends on:
 
@@ -251,11 +261,33 @@ against the real project and all now fixed and asserted:
   between the public browser key and seller PII. Revoked, plus default
   privileges so future tables inherit the lockdown.
 
-Still open in Phase 0: the operator login has to be created in the Supabase
-dashboard (credentials are not something to automate), Sentry is not wired, and
-the board is read-only until Phase 1 — drag-to-move has to write activity and
-reorder the dial queue, so a board that moves cards without doing either would
-be a lie.
+**A fourth found only by deploying.** `cleanUrls: true` turns the SPA rewrite
+destination `/app/index.html` into a 308 back to `/app/`, so the rewrite served
+nothing and every deep route 404'd — including the `/app/leads/<id>` link that
+goes in every new-lead alert email. `/app/` itself worked, which is why it
+looked fine. Destination is now `/app/`; `scripts/probe-deploy.sh` guards it,
+because `cleanUrls` exists only on Vercel and nothing local reproduces it.
+
+### Dashboard settings that no API can reach
+
+Three things live in dashboard UI with no MCP tool or CLI equivalent, so they
+are Tossie's to set:
+
+1. **`SUPABASE_SERVICE_KEY`** in Vercel → the one required secret. It bypasses
+   RLS, so it should never pass through anyone else's hands. Until it is set,
+   `api/lead.js` validates a website lead, logs it, and returns 200 — the site
+   works, the lead just is not stored. Everything else is already wired: the
+   Supabase URL and anon key are committed defaults, since the anon key is
+   public by design and `probe-live.sh` proves it inert.
+2. **Supabase → Authentication → URL Configuration.** Site URL and the redirect
+   allow-list must include the deployed origin, or the magic link will bounce
+   the operator to `localhost:3000`.
+3. **Custom SMTP** (Supabase → Authentication → Emails). The built-in sender is
+   rate-limited to a handful of messages an hour and is meant for testing; on
+   current projects it will only deliver to addresses attached to the Supabase
+   account. Point it at the same Resend account the lead alerts use.
+
+Also still open: Sentry is not wired.
 
 - Supabase project; `teams` (one row), `profiles`, auth, `get_my_team_id()`,
   `is_team_owner()` helpers, RLS baseline

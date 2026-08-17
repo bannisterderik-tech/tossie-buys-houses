@@ -2,10 +2,9 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "buildCommand": "node gen/build.mjs && npm --prefix app ci && npm --prefix app run build",
   "outputDirectory": "site",
-  "cleanUrls": true,
   "trailingSlash": true,
   "rewrites": [
-    { "source": "/app/:path*", "destination": "/app/" }
+    { "source": "/app/:path*", "destination": "/app/index.html" }
   ],
   "headers": [
     {
