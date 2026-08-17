@@ -586,12 +586,24 @@ and an existing CRM. This promotes ingestion to its own phase (1.5) and makes
 skip-trace + DNC/litigator scrubbing a hard prerequisite of the dialer rather
 than a later addition.
 
+**CRM — build it, don't integrate one.** Decided Aug 17, 2026. There is no
+incumbent CRM to import from, so the FUB adapter work in Phase 1.5
+(`fub-import`, `fub-webhook`, `fub-outbox-cron`, encrypted key storage) is cut
+entirely. Ingestion keeps CSV import for purchased lists; nothing needs
+two-way sync with an outside system.
+
+The standing constraint on it is **simple**. reoperative's `App.jsx` is 13,310
+lines and that is the thing to not do. The shape chosen instead: *the lead
+detail panel is the CRM* — not a tasks app beside a notes app beside a dialer
+app. Concretely, that means (a) every write that touches more than one table is
+one RPC, so the UI cannot half-apply it, (b) business rules like the
+outcome-to-status mapping live in the database where the dialer and SDR inherit
+them, and (c) no dependency earns its place unless the platform genuinely can't
+do the job — the board drags on native HTML5, not three `@dnd-kit` packages.
+
 ## 9. Still open
 
-1. **Which CRM is Tossie on today?** FUB is already fully supported (import,
-   webhook, encrypted key storage, two-way outbox). Anything else means CSV
-   import first, adapter later if it's worth it.
-2. **Which list vendor?** Determines the CSV column-mapping work in Phase 1.5.
+1. **Which list vendor?** Determines the CSV column-mapping work in Phase 1.5.
    (BatchLeads is implied by the `batchleads_id` column on `cold_call_leads`.)
 3. **Who operates it** — just Tossie, or a team with roles? Affects RLS, lead
    routing, and whether round-robin assignment is needed.
