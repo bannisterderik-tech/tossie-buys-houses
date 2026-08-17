@@ -199,10 +199,24 @@ never take down the main domain's deliverability.
 
 Nothing works without this and everything after it is parallelizable.
 
-**Built.** Migrations in `supabase/migrations/`, tests in `supabase/tests/`,
-operator app in `app/`. Runs with `npm test` (16 endpoint assertions + 15
-database assertions, no network, no Docker, no Supabase project needed —
-`scripts/db-test.sh` spins up a throwaway Postgres and stubs `auth.*`).
+**Built and deployed to the database.** Migrations in `supabase/migrations/`,
+tests in `supabase/tests/`, operator app in `app/`.
+
+| | |
+|---|---|
+| Supabase project | `tossie-operator` — ref `fvkxdhuwfjnsvkjjordm`, us-east-1, free tier |
+| API URL | `https://fvkxdhuwfjnsvkjjordm.supabase.co` |
+| Team UUID | `70551e00-0000-4000-8000-000000000001` |
+| Migrations applied | 4 |
+| Vercel | team `team_KKsStWMGNjKgymYlx2t3KoZf`, **project not yet created** — Vercel needs a GitHub Login Connection before it can link the repo |
+
+Three commands, none of which need an account:
+
+```
+npm test                  # 16 endpoint + 20 database assertions
+./scripts/db-test.sh      # throwaway Postgres, applies every migration
+./scripts/probe-live.sh   # asks the attacker's question of a live project
+```
 
 Four decisions made while building that the rest of the plan depends on:
 
@@ -224,9 +238,24 @@ Four decisions made while building that the rest of the plan depends on:
    stores the exact text, version, IP and timestamp. If the wording changes,
    bump the version; old leads keep their own record.
 
-Still open in Phase 0: nothing blocking. Sentry is not wired, and the board is
-read-only until Phase 1 (drag-to-move has to write activity and reorder the
-dial queue, so a board that moves cards without doing either would be a lie).
+**Three things the local harness could not have caught**, all found by running
+against the real project and all now fixed and asserted:
+
+- Postgres grants EXECUTE to PUBLIC on every new function and Supabase
+  publishes public-schema functions as REST endpoints, so five SECURITY
+  DEFINER functions — three of them trigger functions — were callable at
+  `/rest/v1/rpc/<name>`.
+- Realtime is opt-in per table. Without the publication, the leads list
+  subscribes, succeeds, and receives nothing: a silent failure.
+- `anon` had default table grants on every table, so RLS was the *only* thing
+  between the public browser key and seller PII. Revoked, plus default
+  privileges so future tables inherit the lockdown.
+
+Still open in Phase 0: the operator login has to be created in the Supabase
+dashboard (credentials are not something to automate), Sentry is not wired, and
+the board is read-only until Phase 1 — drag-to-move has to write activity and
+reorder the dial queue, so a board that moves cards without doing either would
+be a lie.
 
 - Supabase project; `teams` (one row), `profiles`, auth, `get_my_team_id()`,
   `is_team_owner()` helpers, RLS baseline
