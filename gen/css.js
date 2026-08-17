@@ -150,6 +150,14 @@ footer.site a:hover{color:#fff}
 .footgrid{display:grid;grid-template-columns:1.5fr 1fr 1fr 1fr;gap:34px;margin-bottom:34px}
 .footbot{border-top:1px solid rgba(255,255,255,.13);padding-top:20px;font-size:.83rem;line-height:1.7}
 .footbot .disc{opacity:.72;max-width:78ch;margin-top:9px}
+/* Staff login. Deliberately quiet: it is a door for two people, not a CTA.
+   inline-block because footer.site a is display:block — without it the hit
+   area spans the full footer width and a stray click lands in the console.
+   Opacity stops at .72 to match the disclaimer above it; lower looked better
+   but fell under the 4.5:1 contrast floor at this size. */
+.footbot .stafflink{margin-top:14px;font-size:.8rem}
+.footbot .stafflink a{display:inline-block;opacity:.72;text-decoration:none}
+.footbot .stafflink a:hover{opacity:1;text-decoration:underline}
 
 .mobilebar{display:none;position:fixed;bottom:0;left:0;right:0;z-index:80;background:#fff;border-top:1px solid ${line};box-shadow:0 -3px 18px rgba(13,31,60,.14);padding:9px 12px;gap:9px}
 .mobilebar a{flex:1;font-size:.97rem;padding:14px 8px}

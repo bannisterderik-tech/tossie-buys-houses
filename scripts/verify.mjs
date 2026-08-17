@@ -94,6 +94,10 @@ for (const f of files) {
     const h = raw.endsWith('/') || /\.[a-z]+$/.test(raw) ? raw : raw + '/';
     if (/\.(xml|txt|png|jpg|jpeg|webp|svg|ico|css|js)$/.test(h)) continue;
     if (h.startsWith('/api/')) continue;
+    // /app is the operator console — a separate Vite build that lands in
+    // site/app during the Vercel build, after this audit has already run. It
+    // is verified against the live deployment by scripts/probe-deploy.sh.
+    if (h === '/app/' || h.startsWith('/app/')) continue;
     if (!allUrls.has(h)) add('blocker', `${url}: broken internal link -> ${href}`);
     else if (h !== url) inbound.set(h, (inbound.get(h) || 0) + 1);
   }

@@ -211,7 +211,8 @@ function footer() {
 <div><h4>Company</h4><a href="/how-it-works/">How it works</a><a href="/cash-offer-vs-listing/">Cash offer vs. listing</a><a href="/about/">About Tossie</a><a href="/guides/">Guides</a><a href="/faq/">FAQ</a><a href="/contact/">Contact</a><a href="/privacy/">Privacy</a><a href="/terms/">Terms</a></div>
 </div>
 <div class="footbot">&copy; ${new Date().getFullYear()} ${esc(BIZ.legalName)} dba ${esc(BIZ.name)}. Georgia Real Estate License #${BIZ.licenses[0].number} &middot; South Carolina Real Estate License #${BIZ.licenses[1].number}.
-<p class="disc">${esc(BIZ.name)} buys residential property as a principal for its own account. We are not acting as your real estate agent or broker in these transactions and we do not represent you. Nothing on this site is legal, tax, or financial advice. Foreclosure, probate, and tax-sale timelines summarized here are general information about state law and change over time; confirm your own situation with a licensed attorney in your state. Offers vary by property condition, location, and title status.</p></div>
+<p class="disc">${esc(BIZ.name)} buys residential property as a principal for its own account. We are not acting as your real estate agent or broker in these transactions and we do not represent you. Nothing on this site is legal, tax, or financial advice. Foreclosure, probate, and tax-sale timelines summarized here are general information about state law and change over time; confirm your own situation with a licensed attorney in your state. Offers vary by property condition, location, and title status.</p>
+<p class="stafflink"><a href="/app/" rel="nofollow">Team login</a></p></div>
 </div></footer>
 <div class="mobilebar"><a class="btn btn-navy" href="tel:${tel}">Call ${PHONE}</a><a class="btn" href="#offer">Cash Offer</a></div>
 <script>
