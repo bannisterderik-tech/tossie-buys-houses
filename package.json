@@ -1,0 +1,15 @@
+{
+  "name": "tossie-buys-houses",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "node gen/build.mjs",
+    "verify": "node scripts/verify.mjs",
+    "test:api": "node scripts/api-test.mjs",
+    "test:db": "./scripts/db-test.sh",
+    "test": "npm run test:api && npm run test:db"
+  }
+}
