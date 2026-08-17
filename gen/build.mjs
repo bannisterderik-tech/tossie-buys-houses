@@ -10,6 +10,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { CSS } from './css.js';
+import { consentHtml } from '../lib/consent.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = path.join(ROOT, 'site');
@@ -161,7 +162,7 @@ ${SITUATIONS.map((s) => `<option value="${esc(s.slug)}">${esc(s.name)}</option>`
 <option value="other">Something else</option></select></div>
 <button class="btn btn-lg" type="submit">Get My Cash Offer</button>
 <div class="formstatus" role="status" aria-live="polite"></div>
-<p class="consent">By submitting, you agree to our <a href="/terms/">Terms</a> and <a href="/privacy/">Privacy Policy</a> and consent to receive calls, texts, and emails from ${esc(BIZ.name)} about your property. Message frequency varies. Reply STOP to opt out. Consent is not a condition of any purchase.</p>
+<p class="consent">${consentHtml(esc(BIZ.name))}</p>
 </form>
 <p class="formnote">No obligation &middot; No fees &middot; We never list your house publicly</p>
 </div>`;
@@ -1019,7 +1020,7 @@ fs.writeFileSync(path.join(OUT, 'sitemap.xml'),
 
 fs.writeFileSync(path.join(OUT, 'robots.txt'), NOINDEX
   ? `User-agent: *\nDisallow: /\n`
-  : `User-agent: *\nAllow: /\n\nUser-agent: GPTBot\nAllow: /\n\nUser-agent: OAI-SearchBot\nAllow: /\n\nUser-agent: ChatGPT-User\nAllow: /\n\nUser-agent: ClaudeBot\nAllow: /\n\nUser-agent: Claude-Web\nAllow: /\n\nUser-agent: PerplexityBot\nAllow: /\n\nUser-agent: Google-Extended\nAllow: /\n\nUser-agent: Applebot-Extended\nAllow: /\n\nUser-agent: CCBot\nAllow: /\n\nUser-agent: Bingbot\nAllow: /\n\nSitemap: ${ORIGIN}/sitemap.xml\n`);
+  : `User-agent: *\nAllow: /\nDisallow: /app/\n\nUser-agent: GPTBot\nAllow: /\n\nUser-agent: OAI-SearchBot\nAllow: /\n\nUser-agent: ChatGPT-User\nAllow: /\n\nUser-agent: ClaudeBot\nAllow: /\n\nUser-agent: Claude-Web\nAllow: /\n\nUser-agent: PerplexityBot\nAllow: /\n\nUser-agent: Google-Extended\nAllow: /\n\nUser-agent: Applebot-Extended\nAllow: /\n\nUser-agent: CCBot\nAllow: /\n\nUser-agent: Bingbot\nAllow: /\n\nSitemap: ${ORIGIN}/sitemap.xml\n`);
 
 fs.writeFileSync(path.join(OUT, 'llms.txt'),
 `# ${BIZ.name} (${BIZ.legalName})

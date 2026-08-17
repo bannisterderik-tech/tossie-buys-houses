@@ -1,0 +1,21 @@
+{
+  "name": "tossie-app",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "//": "React 18 and Vite 5 are pinned to match reoperative (~/Downloads/realtygrind) so its dialer, messages and SDR components port in without a framework migration on top of the port.",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.39.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.2.0",
+    "vite": "^5.0.0"
+  }
+}
