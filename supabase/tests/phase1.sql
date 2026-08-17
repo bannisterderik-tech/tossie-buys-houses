@@ -5,6 +5,14 @@
 GRANT USAGE ON SCHEMA public TO authenticated;
 GRANT ALL ON ALL TABLES IN SCHEMA public TO authenticated;
 
+-- Signups are gated by allowed_signups (20260817140000). Production requires an
+-- operator to be allow-listed before they can ever sign in; the fixtures below
+-- have to earn their way in the same way, or they are testing a path real users
+-- do not have.
+INSERT INTO allowed_signups (email) VALUES
+  ('tossie@tossiebuyshouses.com'), ('va@example.com'), ('outsider@example.com')
+ON CONFLICT (email) DO NOTHING;
+
 -- These run as the caller, so the suite has to be a real signed-in user.
 INSERT INTO auth.users (id, email, raw_user_meta_data)
 VALUES ('aaaaaaaa-0000-4000-8000-000000000001', 'tossie@tossiebuyshouses.com',

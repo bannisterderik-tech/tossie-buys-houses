@@ -56,24 +56,20 @@ function NotFound({ path }) {
 }
 
 /**
- * Shown when the build has no Supabase credentials — which is the state of
- * every build until Tossie's project is connected. Better than a blank screen
- * or a console error nobody sees.
+ * Only reachable if someone explicitly sets VITE_SUPABASE_URL to an empty
+ * string, since supabase.js falls back to the project's public config. Kept as
+ * a real message rather than a blank screen for that case.
  */
 function SetupNotice() {
   return (
     <div className="setup">
       <div className="card">
-        <h2>Not connected yet</h2>
+        <h2>Not connected</h2>
         <div className="body">
-          <p>This build has no Supabase credentials, so there is nothing to sign in to.</p>
-          <p>Set both in Vercel → Project → Settings → Environment Variables, then redeploy:</p>
-          <code>{'VITE_SUPABASE_URL=https://<ref>.supabase.co\nVITE_SUPABASE_ANON_KEY=<anon key>'}</code>
-          <p style={{ color: 'var(--muted)', fontSize: '0.86rem', marginBottom: 0 }}>
-            The anon key is safe in the browser bundle — every query is scoped by
-            row-level security. The service_role key must never be set with a
-            <code style={{ display: 'inline', padding: '1px 5px', margin: '0 3px' }}>VITE_</code>
-            prefix, because that would publish it.
+          <p style={{ marginBottom: 0 }}>
+            This build has no Supabase URL or anon key. Unset{' '}
+            <code style={{ display: 'inline', padding: '1px 5px' }}>VITE_SUPABASE_URL</code>{' '}
+            to fall back to the project defaults, or set both to point at another project.
           </p>
         </div>
       </div>

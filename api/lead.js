@@ -6,9 +6,13 @@
  * returns 200, so the public site keeps working before the accounts are wired.
  *
  * Env vars (Vercel → Project → Settings → Environment Variables):
- *   SUPABASE_URL          https://<ref>.supabase.co
- *   SUPABASE_SERVICE_KEY  service_role key — SERVER ONLY, never expose to the browser
- *   TOSSIE_TEAM_ID        defaults to the seeded team in 20260817120000_foundation.sql
+ *   SUPABASE_SERVICE_KEY  service_role key — THE ONE REQUIRED SECRET. Server
+ *                         only; it bypasses RLS entirely, so it must never be
+ *                         given a VITE_ prefix or it would ship to the browser.
+ *                         Without it this endpoint validates, logs, and returns
+ *                         200 — the site keeps working, leads just aren't stored.
+ *   SUPABASE_URL          optional; defaults to the project below
+ *   TOSSIE_TEAM_ID        optional; defaults to the seeded team
  *   ALERT_EMAIL_TO        where the new-lead alert goes
  *   ALERT_EMAIL_FROM      verified sender on the sending domain
  *   RESEND_API_KEY        optional; if absent no email is attempted
@@ -124,14 +128,17 @@ export default async function handler(req, res) {
     raw_payload: raw,
   };
 
-  const { SUPABASE_URL, SUPABASE_SERVICE_KEY } = process.env;
+  // The URL is public (it is in the browser bundle already), so it defaults.
+  // The service key has no default and never will.
+  const SUPABASE_URL = process.env.SUPABASE_URL || 'https://fvkxdhuwfjnsvkjjordm.supabase.co';
+  const { SUPABASE_SERVICE_KEY } = process.env;
   let leadId = null;
 
   // --- store -------------------------------------------------------------
   // Never fails the request. A seller who filled out the form gets a success
   // page even if the database is having a bad day; the alert email below is
   // the backstop that means the lead is not lost.
-  if (SUPABASE_URL && SUPABASE_SERVICE_KEY) {
+  if (SUPABASE_SERVICE_KEY) {
     try {
       const r = await fetch(`${SUPABASE_URL}/rest/v1/leads`, {
         method: 'POST',

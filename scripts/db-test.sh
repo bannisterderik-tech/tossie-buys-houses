@@ -42,7 +42,7 @@ for f in supabase/migrations/*.sql; do
 done
 
 suites=("$@")
-[ ${#suites[@]} -eq 0 ] && suites=(phase0 phase1)
+[ ${#suites[@]} -eq 0 ] && suites=(phase0 phase1 phase2_auth)
 
 fail=0
 for s in "${suites[@]}"; do

@@ -58,6 +58,12 @@ probe 'log a disposition'         POST '/rest/v1/rpc/log_disposition' \
 probe 'move a board card'         POST '/rest/v1/rpc/move_lead_to_stage' \
       '{"p_lead_id":"00000000-0000-4000-8000-000000000000","p_stage_id":"00000000-0000-4000-8000-000000000000"}'
 
+# Sign-up is open (magic link needs shouldCreateUser), so the allowed_signups
+# trigger is the only thing standing between a stranger and a seat on the team.
+# Safe to run: an address that is not on the list never receives an email.
+probe 'sign up as a stranger'     POST '/auth/v1/otp' \
+      '{"email":"probe-not-authorized@example.invalid","create_user":true}'
+
 if [ $fail -eq 0 ]; then
   echo "▸ all probes denied"
 else
