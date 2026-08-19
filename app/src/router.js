@@ -80,3 +80,9 @@ export function matchDealId(path) {
   const m = path.match(/^\/deals\/([0-9a-f-]{36})$/i);
   return m ? m[1] : null;
 }
+
+/** `/prospects/:id` -> id. Same UUID-only rule as the three above. */
+export function matchProspectId(path) {
+  const m = path.match(/^\/prospects\/([0-9a-f-]{36})$/i);
+  return m ? m[1] : null;
+}

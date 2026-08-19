@@ -46,6 +46,13 @@
 //     seller's reply. Retrying is only safe because of the idempotency claim
 //     below, so the two changes are one change.
 //
+// A STRANGER'S FIRST TEXT IS A LEAD. An inbound message matching no lead used
+// to be stored with lead_id NULL and left there. Keeping it was right; leaving
+// it was not — a stranger texting this number is a seller answering a yard sign
+// or a postcard, and nothing in the product ever showed it to anyone. Step 4
+// below creates the lead. The consent record it writes, and the reasoning for
+// why an inbound text is a genuine opt-in basis, live in inbound-lead.ts.
+//
 // ORDER OF WRITES, and why it is the way it is.
 //
 //   1. Signature check. First, always, and it fails closed — everything below
@@ -57,12 +64,33 @@
 //      ever fell through it would be filed as a message the seller never sent.
 //      It returns before From/To are resolved, before classify() is called and
 //      before a single suppression write — a receipt can therefore never
-//      trigger STOP handling, no matter what it carries.
+//      trigger STOP handling, no matter what it carries, and it returns long
+//      before step 4, so a status callback can never create a lead either.
 //   3. Suppression (STOP/START), BEFORE the idempotency claim.
-//   4. The idempotency claim (the sms_messages insert; twilio_sid is UNIQUE).
-//   5. The timeline, the SDR notification and the auto-reply record.
+//   4. LEAD CREATION for an unmatched, non-keyword message. After suppression
+//      so that nothing is ever inserted ahead of the compliance writes, and
+//      before the claim so the message in step 5 can be filed against the lead
+//      it just created rather than landing unattached and needing a second
+//      pass to fix. It cannot fail the request — see createLeadFromInboundSms.
+//   5. The idempotency claim (the sms_messages insert; twilio_sid is UNIQUE).
+//   6. The timeline, the SDR notification and the auto-reply record.
 //
-// Steps 3 and 4 are in that order and not the other one. The claim exists to
+// Step 4 is guarded on keyword === null, which is what actually keeps a STOP
+// from creating a lead. Someone texting STOP to a number they were never on is
+// precisely the person not to add to a CRM: they are telling you they do not
+// want to hear from you, and answering that by opening a record on them —
+// stamped, worse, with a consent basis — is the fact pattern that turns a
+// complaint into a claim. HELP and START are excluded for the same reason. The
+// ordering is a second line of defence, not the first: by the time step 4 could
+// run, a STOP has already written its opt-out row above.
+//
+// It is guarded a second time on WHO sent it — senderCanOpenALead() in
+// inbound-lead.ts — because two senders are not a homeowner and both of them
+// would get a consent record saying one was: our own numbers, and any sender
+// with fewer than ten digits, which matchLead() can never match again and which
+// would therefore open a fresh lead on every message it ever sends.
+//
+// Steps 3 and 5 are in that order and not the other one. The claim exists to
 // stop a Twilio retry from doubling the thread, which means everything behind it
 // is skipped on a retry — so anything that must survive a failure has to happen
 // in front of it. Put the opt-out behind the claim and a failed suppression
@@ -89,6 +117,12 @@
 // updating, visible on every thread) rather than to a fabricated inbound
 // message or, far worse, a dropped STOP.
 //
+// That argument was made when the worst thing behind this branch was a mis-filed
+// row, and step 4 would have widened it to a fabricated consent record: the From
+// on a status callback is our own line, so the fall-through would open a lead on
+// our own number. It cannot, because step 4 refuses our own numbers as senders.
+// The degradation is still the one argued for above.
+//
 // 'received' is excluded explicitly rather than left to the Body test, because
 // 'received' is the one MessageStatus value that describes an inbound message.
 // If it ever shows up on the inbound webhook, that alone must not be enough to
@@ -98,6 +132,8 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { validateTwilioSignature } from '../_shared/twilio-signature.ts';
 import { normalizeE164, phoneKey } from '../_shared/phone-validation.ts';
+import { buildInboundLead, inboundConsentSummary, senderCanOpenALead } from './inbound-lead.ts';
+import { classify, type Keyword, opensALead } from './keywords.ts';
 
 // Structural, so this file does not depend on which supabase-js specifier the
 // rest of the functions settle on.
@@ -108,22 +144,6 @@ type SupabaseAdmin = any;
 // say who is texting; an unbranded "You have been unsubscribed" is both a
 // compliance finding and a confusing thing to receive.
 const BRAND = 'Tossie Buys Houses';
-
-// Whole-message keywords, matched exactly, case- and punctuation-insensitive.
-//
-// Deliberately NOT fuzzy: "stop by tomorrow at 3" is a hot seller confirming an
-// appointment, and suppressing them would be worse than useless. A message that
-// means stop without saying STOP is caught by a human reading the thread and
-// adding a manual opt-out — which is what source 'manual' exists for.
-const STOP_WORDS = new Set(['STOP', 'STOPALL', 'UNSUBSCRIBE', 'CANCEL', 'END', 'QUIT']);
-const HELP_WORDS = new Set(['HELP', 'INFO']);
-// Twilio's standard opt-in list also includes YES. Excluded on purpose: "yes"
-// is the most common reply in a seller conversation, and reading it as "resume
-// texting a number that opted out" gets that exactly backwards. START and
-// UNSTOP cannot mean anything else.
-const START_WORDS = new Set(['START', 'UNSTOP']);
-
-type Keyword = 'stop' | 'help' | 'start' | null;
 
 /**
  * How far along a message is, as a number that only ever goes up.
@@ -170,15 +190,6 @@ function mapTwilioStatus(s: unknown): string {
     case 'undelivered': return 'undelivered';
     default: return 'queued'; // accepted / scheduled / sending / queued / unknown
   }
-}
-
-/** Classify the whole message, or null if it is an ordinary reply. */
-function classify(body: string): Keyword {
-  const word = (body || '').trim().toUpperCase().replace(/^\W+|\W+$/g, '');
-  if (STOP_WORDS.has(word)) return 'stop';
-  if (HELP_WORDS.has(word)) return 'help';
-  if (START_WORDS.has(word)) return 'start';
-  return null;
 }
 
 /**
@@ -298,6 +309,13 @@ Deno.serve(async (req: Request) => {
     const toKey = phoneKey(to);
     const ours = (numbers || []).find((n: { e164: string }) => phoneKey(n.e164) === toKey) ?? null;
     const fromKey = phoneKey(from);
+    // The same table answers a second question, so it is asked here rather than
+    // by a second query: is the SENDER one of ours? A message from our own line
+    // is not a homeowner reaching out, and the two places that would treat it
+    // as one — lead creation and the SDR hand-off — are the two that write or
+    // say something. See senderCanOpenALead for what reaches this shape.
+    const fromIsOneOfOurs = fromKey !== null &&
+      (numbers || []).some((n: { e164: string }) => phoneKey(n.e164) === fromKey);
 
     // Everything downstream is team-scoped, so the team has to be resolved
     // before anything else. Normally it is the owner of the number that was
@@ -328,15 +346,10 @@ Deno.serve(async (req: Request) => {
     // said something, and dropping it because of our registration state would
     // lose a deal for a reason that has nothing to do with them.
 
-    const leadId = await matchLead(admin, teamId, fromKey);
-    const ctx: ReplyContext = {
-      teamId,
-      leadId,
-      phoneNumberId: ours?.id ?? null,
-      ourE164: to,
-      theirE164: from,
-      inboundSid: messageSid,
-    };
+    // `let`, because step 4 below may fill it in. Every write after that point
+    // reads this one variable, so the message, the timeline, the SDR hand-off
+    // and the auto-reply record all agree on which lead they are about.
+    let leadId = await matchLead(admin, teamId, fromKey);
 
     // ── Suppression, ahead of the claim ────────────────────────────────────
     // See the note at the top of the file: these two writes are the ones that
@@ -401,6 +414,40 @@ Deno.serve(async (req: Request) => {
       }
       console.log(`[twilio-webhook] opt-in recorded for team ${teamId}`);
     }
+
+    // ── A stranger's first text is a lead ──────────────────────────────────
+    // opensALead() is the whole guard, and it lives in keywords.ts next to the
+    // classifier it depends on so a test can assert the rule that a STOP never
+    // creates a lead. Read it there; it is four lines.
+    //
+    // A photo-only MMS with no body still qualifies. classify('') is null, and
+    // a stranger who sends a picture of a roof is reaching out; the consent
+    // record says in words that the message carried no text, so nothing is
+    // being claimed that did not happen.
+    //
+    // senderCanOpenALead() is the other half of the guard, and it is about who
+    // sent the message rather than what it said: our own numbers and senders
+    // too short to ever match again. Its reasoning is next to the consent
+    // record it protects, in inbound-lead.ts.
+    if (opensALead(keyword, leadId) && senderCanOpenALead(fromKey, fromIsOneOfOurs)) {
+      leadId = await createLeadFromInboundSms(admin, {
+        teamId,
+        from,
+        to,
+        body,
+        messageSid,
+        mediaUrls,
+      });
+    }
+
+    const ctx: ReplyContext = {
+      teamId,
+      leadId,
+      phoneNumberId: ours?.id ?? null,
+      ourE164: to,
+      theirE164: from,
+      inboundSid: messageSid,
+    };
 
     // ── Idempotency ────────────────────────────────────────────────────────
     // Twilio retries when it does not get our TwiML — a timeout, a 5xx, a
@@ -485,9 +532,14 @@ Deno.serve(async (req: Request) => {
         });
       }
     } else {
+      // Two ways to land here now, and they are not the same event. A keyword
+      // from a stranger is the design working: a STOP is suppressed and filed
+      // and deliberately given no lead. Anything else means step 4 tried and
+      // failed, which it has already logged at error level — this line is the
+      // reminder that a real seller's message is sitting unattached.
       console.warn(
-        `[twilio-webhook] inbound from ${from} matched no lead — stored unattached ` +
-          `(sms ${inserted.id}, ${mediaUrls.length} media)`,
+        `[twilio-webhook] inbound from ${from} has no lead — stored unattached ` +
+          `(sms ${inserted.id}, keyword=${keyword ?? 'none'}, ${mediaUrls.length} media)`,
       );
     }
 
@@ -502,11 +554,29 @@ Deno.serve(async (req: Request) => {
     //                      above, so by the time anything could be dispatched
     //                      the opt-out row already exists — but the keyword
     //                      check is what actually stops it, not the ordering.
-    //   leadId             an unmatched number has no lead to qualify and no
-    //                      consent basis on file; it waits for a human.
+    //   leadId             normally satisfied now, because step 4 creates the
+    //                      lead for exactly the messages that reach here — a
+    //                      stranger's first text is the single most valuable
+    //                      thing this endpoint receives and the SDR should see
+    //                      it. Still checked, because step 4 is allowed to fail
+    //                      without failing the request, and a lead id it did not
+    //                      produce is not one to invent here. ai-sdr opens the
+    //                      conversation itself off the stored inbound message
+    //                      (see openInboundConversation) after running the same
+    //                      gates every other send path runs; none of that is
+    //                      re-decided here.
     //   body.trim()        an MMS of the roof with no caption. ai-sdr requires
     //                      inbound_message and would refuse it, and there is
     //                      nothing in a photo for a text model to answer.
+    //   not one of ours    a message whose sender is one of our own lines is
+    //                      our own outbound copy coming back — a lead typed
+    //                      with one of our numbers is enough to produce it.
+    //                      Handing that to the SDR is two numbers holding a
+    //                      conversation with each other, a paid model call per
+    //                      turn and nothing in the loop that ends it. Checked
+    //                      here as well as at lead creation because a lead
+    //                      already carrying one of our numbers is matched, not
+    //                      created, and would walk past that guard.
     //
     // Placed after the idempotency claim on purpose: a Twilio redelivery
     // returns from the duplicate branch above and never reaches here, so one
@@ -514,7 +584,7 @@ Deno.serve(async (req: Request) => {
     // between the claim and this line loses the notification, since the retry
     // is then a duplicate — a missed reply the operator can see in the thread,
     // rather than a seller texted twice by a machine.
-    if (keyword === null && leadId && body.trim()) {
+    if (keyword === null && leadId && body.trim() && !fromIsOneOfOurs) {
       notifySdr({ leadId, body, messageSid });
     }
 
@@ -867,6 +937,110 @@ async function matchLead(
     .limit(1)
     .maybeSingle();
   return call?.lead_id ?? null;
+}
+
+/**
+ * Open a lead for a number nobody here has heard from before.
+ *
+ * The row itself — and the reasoning behind treating an inbound text as a real
+ * consent basis — is in inbound-lead.ts, which is pure and tested. This
+ * function is only the write, plus the one rule that belongs to the webhook
+ * rather than to the record.
+ *
+ * HOW THIS IS KEPT FROM EVER FAILING THE WEBHOOK. Twilio retries any non-2xx,
+ * so a throw out of here would turn a bad insert into a retry storm — and since
+ * each retry re-runs the whole handler, an insert that fails systematically (a
+ * constraint tightened, a column renamed) would multiply every inbound message
+ * by Twilio's full retry schedule and still never succeed. That is strictly
+ * worse than the bug this function exists to fix, because a failure degrades
+ * back to exactly the old behaviour: the message is stored, unattached, and a
+ * human can attach it. So there are two layers, because they catch different
+ * things:
+ *
+ *   - supabase-js reports failures in `error` rather than throwing, so the
+ *     insert and the activity write are checked and logged, never rethrown.
+ *   - the whole body sits in a try/catch anyway, for the failures that are not
+ *     the query: the client throwing on a transport error, a serialisation
+ *     problem, anything the shape of the SDK makes possible.
+ *
+ * Either way the caller gets null, which is the unmatched case the rest of the
+ * handler has always handled. Nothing above or below this call reads a thrown
+ * error from it, and nothing here returns a Response.
+ *
+ * Not idempotent, and it does not need to be: it runs behind matchLead(), which
+ * finds a lead by its phone, and it runs ahead of the twilio_sid claim, so a
+ * Twilio retry of the same message finds the lead the first attempt created, so
+ * opensALead() is false and the retry walks past. The window where a retry could
+ * double a lead is the gap between this insert and the claim below it —
+ * milliseconds, and the cost if it ever lands is two lead rows on one thread,
+ * which an operator merges. The alternative, claiming first, would mean a
+ * failure anywhere after the claim leaves a seller's message permanently
+ * unattached, because the retry that would have fixed it is swallowed.
+ */
+async function createLeadFromInboundSms(
+  admin: SupabaseAdmin,
+  opts: {
+    teamId: string;
+    from: string;
+    to: string;
+    body: string;
+    messageSid: string;
+    mediaUrls: string[];
+  },
+): Promise<string | null> {
+  // Twilio's inbound webhook carries no send timestamp — only the outbound
+  // status callbacks do — so the moment it reached us is the honest answer to
+  // "when did they agree", and it is the same value the consent record, the
+  // follow-up and the activity row all use.
+  const receivedAt = new Date().toISOString();
+
+  try {
+    const { data, error } = await admin
+      .from('leads')
+      .insert(buildInboundLead({ ...opts, receivedAt }))
+      .select('id')
+      .single();
+
+    if (error) {
+      console.error(
+        `[twilio-webhook] could not open a lead for ${opts.from} (sid=${opts.messageSid}): ${error.message}` +
+          ' — message will be stored unattached',
+      );
+      return null;
+    }
+
+    // The insert trigger already writes a 'lead_created' row saying the source
+    // was inbound_sms. This one is the consent event, in the same shape and
+    // with the same type record_lead_consent() uses, so the timeline reads the
+    // same whether consent arrived through an operator or through the seller's
+    // own phone. actor_kind 'system' because no person decided it — the seller
+    // did, by texting.
+    await logActivity(admin, {
+      team_id: opts.teamId,
+      lead_id: data.id,
+      actor_kind: 'system',
+      type: 'consent_recorded',
+      summary: inboundConsentSummary(),
+      payload: {
+        source: 'inbound_sms',
+        twilio_sid: opts.messageSid || null,
+        from: opts.from,
+        to: opts.to,
+        received_at: receivedAt,
+      },
+    });
+
+    console.log(
+      `[twilio-webhook] opened lead ${data.id} for ${opts.from} — texted in first (sid=${opts.messageSid})`,
+    );
+    return data.id;
+  } catch (err) {
+    console.error(
+      `[twilio-webhook] lead creation threw for ${opts.from} (sid=${opts.messageSid}):`,
+      (err as Error)?.message || err,
+    );
+    return null;
+  }
 }
 
 /** Twilio wants TwiML back. An empty <Response/> means "no auto-reply". */

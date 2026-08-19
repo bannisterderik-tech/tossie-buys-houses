@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '../supabase.js';
 import { navigate } from '../router.js';
 import InlineField from '../components/InlineField.jsx';
+import PropertyLinks from '../components/PropertyLinks.jsx';
 import DispositionBar from '../components/DispositionBar.jsx';
 import { DeliveryChip, DeliveryFailure } from '../components/DeliveryState.jsx';
 import { callingWindow } from '../lib/calling-window.js';
@@ -369,6 +370,38 @@ export default function LeadDetail({ id }) {
 
       <div className="detail">
         <div>
+          {/* The property, above the seller, because it is what the page is
+              titled with and what every number on the qualifying card is about.
+
+              Until this card existed the address was read-only on the one screen
+              where the operator learns what it actually is. A lead arrives from a
+              form with "123 main" and no city, or with the street misheard off a
+              call, and there was nowhere to fix it — so the corrected address
+              lived in a note, the board and the header kept showing the wrong
+              one, and the research links below would have opened the wrong
+              house. Editing here also means the links re-derive on save, which is
+              the whole reason they sit inside this card and not in a rail of
+              their own. */}
+          <div className="card">
+            <h2>Property</h2>
+            <div className="body">
+              <dl className="facts editable">
+                <InlineField label="Address" value={lead.address} onSave={(v) => patch({ address: v })} placeholder="street address" />
+                <InlineField label="City"    value={lead.city}    onSave={(v) => patch({ city: v })} />
+                <InlineField label="State"   value={lead.state}   onSave={(v) => patch({ state: v })} placeholder="GA" />
+                <InlineField label="ZIP"     value={lead.zip}     onSave={(v) => patch({ zip: v })} />
+                {/* County is here rather than left to the import because it is
+                    the field the assessor lookup below is built from, and it is
+                    also what match_buyers_for_deal() scores a buyer's territory
+                    against — so a lead whose county nobody ever filled in is one
+                    the dispo side matches worse. */}
+                <InlineField label="County"  value={lead.county}  onSave={(v) => patch({ county: v })} placeholder="Chatham" />
+              </dl>
+
+              <PropertyLinks place={lead} />
+            </div>
+          </div>
+
           <div className="card">
             <h2>Seller</h2>
             <div className="body">

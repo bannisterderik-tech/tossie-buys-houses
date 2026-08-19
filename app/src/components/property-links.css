@@ -1,0 +1,99 @@
+/* The property research links.
+
+   Its own file rather than lead-comms.css because the component is meant to be
+   dropped onto any record that has an address — the lead, a prospect, a deal
+   later — and a component whose styles live in another page's stylesheet is a
+   component that silently loses its shape the first time it is reused. Importing
+   it from PropertyLinks.jsx means the styles arrive with it.
+
+   The palette is the brand variables main.jsx sets on :root from
+   data/business.json. The two literals below — #fff for a chip surface and the
+   navy focus ring — are the app-wide convention, copied verbatim from
+   styles.css rather than reinvented, so a chip here and a chip on the Deals
+   screen do not drift apart. The focus ring is the one place that hex is
+   duplicated instead of derived, because rgba() cannot take a custom property
+   as a colour and the alternative is a second variable per brand colour. */
+
+.proplinks {
+  margin-top: 15px;
+  padding-top: 13px;
+  border-top: 1px solid var(--line);
+}
+
+/* Small and grey: this is a caption for the row beneath it, not a section
+   heading competing with the card's own h2. */
+.proplinks .cap {
+  display: block;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 9px;
+}
+
+.proplinks .row { display: flex; flex-wrap: wrap; gap: 7px; }
+
+/* Shaped like the app's chips rather than like links. Six underlined blue
+   phrases in a row read as prose the eye has to parse; six targets read as a
+   row of buttons, which is what they are — the operator is aiming at one of
+   them, not reading the list. */
+.proplinks .proplink {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 6px 11px;
+  border: 1.5px solid var(--line);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--ink);
+  font-size: 0.83rem;
+  font-weight: 600;
+  line-height: 1.35;
+  white-space: nowrap;
+}
+.proplinks .proplink:hover { border-color: var(--navy); background: var(--wash); }
+.proplinks .proplink:focus-visible {
+  outline: 0;
+  border-color: var(--navy);
+  box-shadow: 0 0 0 3px rgba(26, 68, 133, 0.13);
+}
+
+/* The honesty marker. Quiet, because it is a caveat about the route the link
+   takes and not a warning about the destination — but present, because a link
+   labelled "Redfin" that opens a search engine is a small betrayal if the
+   operator was not told, and they will notice on the first click. */
+.proplinks .via {
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.proplinks .why {
+  margin: 9px 0 0;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+/* No address: the caption stays so the row does not simply vanish and leave the
+   operator wondering whether the feature exists on this record at all.
+
+   Named `noaddr` and not `empty` on purpose. styles.css has a global `.empty`
+   for a page with no rows in it — 46px of padding, centred — and this file is
+   imported after it at equal specificity, so a `.proplinks.empty` would have
+   inherited the centring and the side padding and rendered this two-line note
+   as if it were a whole empty screen. */
+.proplinks.noaddr .why { margin-top: 0; }
+
+@media (max-width: 560px) {
+  /* nowrap above keeps a two-word label on one line, which is what we want
+     wherever there is room. On a narrow phone "County assessor" plus the "via
+     search" marker is wider than the card, and a nowrap flex item cannot shrink
+     below its content — so the card itself scrolls sideways. Letting the label
+     wrap costs a second line and keeps the page one column wide, which is the
+     trade the whole app makes on a phone. */
+  .proplinks .proplink { white-space: normal; }
+}

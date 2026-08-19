@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { supabase, isConfigured } from './supabase.js';
-import { useRoute, useLinkInterceptor, matchLeadId, matchBuyerId, matchDealId } from './router.js';
+import { useRoute, useLinkInterceptor, matchLeadId, matchBuyerId, matchDealId, matchProspectId } from './router.js';
 import AuthPage from './components/AuthPage.jsx';
 import Layout from './components/Layout.jsx';
 import LeadsPage from './pages/LeadsPage.jsx';
@@ -18,6 +18,8 @@ import BuyerDetail from './pages/BuyerDetail.jsx';
 import DealsPage from './pages/DealsPage.jsx';
 import DealDetail from './pages/DealDetail.jsx';
 import CampaignsPage from './pages/CampaignsPage.jsx';
+import ProspectsPage from './pages/ProspectsPage.jsx';
+import ProspectDetail from './pages/ProspectDetail.jsx';
 
 export default function App() {
   const [session, setSession] = useState(null);
@@ -42,6 +44,7 @@ export default function App() {
   const leadId = matchLeadId(path);
   const buyerId = matchBuyerId(path);
   const dealId = matchDealId(path);
+  const prospectId = matchProspectId(path);
 
   return (
     <Layout session={session}>
@@ -77,6 +80,13 @@ export default function App() {
         // — is a table nobody can read, which is the exact evidence a carrier
         // asks for when it reviews a Low Volume Mixed campaign.
         : path === '/campaigns' ? <CampaignsPage />
+        // Import already writes cold lists into public.prospects, so unrouted
+        // these are not a missing screen — they are rows that were bought, paid
+        // for and stored with no way to look at them, and no way to reach the
+        // one control that turns a cold call into a consent record. The detail
+        // page is also the only place conversion happens, by design.
+        : prospectId ? <ProspectDetail id={prospectId} />
+        : path === '/prospects' ? <ProspectsPage />
         : path === '/import' ? <ImportPage />
         : path === '/board' ? <BoardPage />
         : path === '/settings/phone' ? <PhoneSettingsPage />

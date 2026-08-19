@@ -10,6 +10,54 @@
  * are no hex values in here that are not a state colour with no token.
  */
 
+/* ── the first question ───────────────────────────────────────────────────
+ * Two cards, side by side, same weight. Not a dropdown and not a pair of radio
+ * buttons: the answer decides which table the file lands in and what is
+ * asserted about the people in it, and a choice with consequences that large
+ * should not look like a preference.
+ *
+ * They are deliberately NOT styled as one safe option and one dangerous one.
+ * An opted-in list is a real thing Tossie has, and a page that visually scolds
+ * the operator for choosing it teaches him to lie to the page — which is the
+ * failure this whole screen was rebuilt to stop. The difference is carried by
+ * what each card says it will do, and by which one is marked the default.
+ */
+.imp-lede { max-width: 62ch; color: var(--muted); font-size: 0.9rem; line-height: 1.55; margin: 0 0 16px; }
+
+.imp-kind { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 13px; }
+.imp-kindcard {
+  display: block;
+  text-align: left;
+  font: inherit;
+  color: var(--ink);
+  background: #fff;
+  border: 1.5px solid var(--line);
+  border-radius: 11px;
+  padding: 17px 18px;
+  cursor: pointer;
+}
+.imp-kindcard:hover { border-color: var(--navy); background: var(--wash); }
+.imp-kindcard:focus-visible { outline: 0; border-color: var(--navy); box-shadow: 0 0 0 3px rgba(26, 68, 133, 0.13); }
+.imp-kindtag {
+  display: inline-block;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 700;
+  color: #4a5a73;
+  background: #eef1f6;
+  border: 1px solid #d5dde9;
+  border-radius: 999px;
+  padding: 2px 8px;
+  margin-bottom: 9px;
+}
+.imp-kindtag.alt { color: #8a6100; background: #fef4e0; border-color: #f5dfa8; }
+.imp-kindcard strong { display: block; font-size: 1.05rem; letter-spacing: -0.01em; }
+.imp-kindsub { display: block; color: var(--muted); font-size: 0.85rem; margin: 4px 0 11px; line-height: 1.45; }
+.imp-kindlist { display: block; font-size: 0.84rem; line-height: 1.5; }
+.imp-kindlist > span { display: block; padding-left: 15px; position: relative; margin-bottom: 4px; }
+.imp-kindlist > span::before { content: '·'; position: absolute; left: 4px; color: var(--muted); font-weight: 700; }
+
 /* ── the consent warning ──────────────────────────────────────────────────
  * Deliberately the loudest thing on the page. This is the one screen in the
  * product where a wrong assumption costs $500-$1,500 per contact, and the
@@ -38,6 +86,60 @@
   padding: 1px 4px;
   border-radius: 3px;
 }
+
+/* ── the consent assertion ────────────────────────────────────────────────
+ * The opted-in banner. Navy rather than the cold list's amber, because it is
+ * not a warning about a mistake about to be made — it is a statement of what
+ * the operator is about to put his name to. Amber here would read as "are you
+ * sure", which is the wrong question: he is sure, and the point is to record
+ * what he is sure about.
+ */
+.imp-attest {
+  border: 2px solid var(--navy);
+  background: #eef3fb;
+  border-radius: 9px;
+  padding: 15px 17px;
+  margin-bottom: 18px;
+}
+.imp-attest h2 { margin: 0 0 6px; font-size: 1rem; color: var(--navy-ink); letter-spacing: -0.01em; }
+.imp-attest p { margin: 0 0 7px; font-size: 0.88rem; color: #23395c; line-height: 1.5; }
+.imp-attest p:last-child { margin-bottom: 0; }
+.imp-attest code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.83rem;
+  background: rgba(0, 0, 0, 0.06);
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
+/* The disclosure sentence, shown verbatim before it is written. Set apart from
+ * the prose around it so it reads as the record itself rather than as more
+ * explanation about the record. */
+.imp-quote {
+  margin: 8px 0 0;
+  padding: 11px 14px;
+  border-left: 3px solid var(--navy);
+  background: var(--wash);
+  border-radius: 0 7px 7px 0;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: var(--ink);
+}
+/* The attested version of the same sentence. Amber because it is the weaker
+ * record and that difference is the entire reason both are shown. */
+.imp-quote.weak { border-left-color: #f0b429; background: #fef8e7; color: #5a4100; }
+
+/* A counted fact the operator has to have read, sitting between the tallies
+ * and the button rather than in a footnote under them. */
+.imp-flag {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: 1px solid #f5dfa8;
+  background: #fef8e7;
+  border-radius: 9px;
+}
+.imp-flag strong { display: block; font-size: 0.9rem; color: #6b4c00; }
+.imp-flag p { margin: 5px 0 0; font-size: 0.85rem; color: #5a4100; line-height: 1.5; }
 
 /* ── steps ───────────────────────────────────────────────────────────────── */
 .imp-steps {
@@ -145,4 +247,8 @@
 
 @media (max-width: 720px) {
   .imp-map .imp-sample { display: none; }
+  /* The two choices stack rather than shrink. Side by side at this width they
+   * become two columns of wrapped text, and the comparison they exist to make
+   * is exactly what gets lost. */
+  .imp-kind { grid-template-columns: 1fr; }
 }

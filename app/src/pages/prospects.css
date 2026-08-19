@@ -1,0 +1,272 @@
+/*
+ * Styles for ProspectsPage and ProspectDetail only. A separate file rather than
+ * an addition to styles.css so the cold-list screens can be built, moved or
+ * deleted without touching the stylesheet every other page shares — the same
+ * reasoning as ImportPage.css, and the same prefix discipline: every class here
+ * starts `pr-`, so nothing on these pages can collide with a global rule and no
+ * global rule can quietly restyle them.
+ *
+ * Colours are the brand custom properties main.jsx sets on :root. The only
+ * literal hex values are state colours that have no token, and they are the
+ * same ones styles.css already uses for .badge.ok / .badge.stop / .banner.warn
+ * — a green that means "cleared" must be the same green everywhere in the
+ * product or it stops meaning anything.
+ */
+
+/* ── the scrub ladder ─────────────────────────────────────────────────────
+ * The loudest thing on the list page, and deliberately so. A purchased list
+ * that has not been skip traced and DNC/litigator scrubbed is not a work queue,
+ * it is a spreadsheet — and the failure mode this block exists to prevent is an
+ * operator scrolling a screen full of rows, picking one, and finding no number
+ * on it. The counters answer "how far through the pipeline is this list" before
+ * a single row is read.
+ */
+.pr-ladder {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.pr-step {
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 12px 14px;
+  background: #fff;
+}
+.pr-step b {
+  display: block;
+  font-size: 1.45rem;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.pr-step span { font-size: 0.79rem; color: var(--muted); display: block; }
+.pr-step.done b { color: #0b6b34; }
+.pr-step.waiting b { color: #a11b0f; }
+/* Callable is the number that decides whether there is a day's work here, so it
+   gets the emphasis a total never earns. */
+.pr-step.hero { border-color: var(--navy); box-shadow: inset 0 0 0 1px var(--navy); }
+
+.pr-bar { height: 6px; background: var(--line); border-radius: 4px; overflow: hidden; margin-top: 9px; }
+.pr-bar > div { height: 100%; background: var(--navy); transition: width 0.25s; }
+.pr-bar.warn > div { background: #d99400; }
+
+/* ── the next action ──────────────────────────────────────────────────────
+ * Sits above the rows when the selected list is not workable yet. It leads with
+ * a sentence and only then offers the control, because the control spends real
+ * money — the dry run first, the priced run second, and the amount on the
+ * button before it is clicked.
+ */
+.pr-next {
+  border: 2px solid #f0b429;
+  background: #fef8e7;
+  border-radius: 9px;
+  padding: 15px 17px;
+  margin-bottom: 16px;
+}
+.pr-next.blocked { border-color: #f5c4bd; background: #fdecea; }
+.pr-next h2 { margin: 0 0 6px; font-size: 1rem; color: #6b4c00; letter-spacing: -0.01em; }
+.pr-next.blocked h2 { color: #8c1a10; }
+.pr-next p { margin: 0 0 7px; font-size: 0.88rem; color: #5a4100; line-height: 1.5; }
+.pr-next.blocked p { color: #7d2018; }
+.pr-next p:last-child { margin-bottom: 0; }
+.pr-next code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.83rem;
+  background: rgba(0, 0, 0, 0.06);
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
+/* The one sentence that has to survive every redesign of these pages. */
+.pr-cold {
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--navy);
+  background: var(--wash);
+  border-radius: 7px;
+  padding: 11px 14px;
+  font-size: 0.85rem;
+  color: var(--body);
+  margin-bottom: 16px;
+}
+.pr-cold strong { color: var(--ink); }
+
+/* ── list picker ─────────────────────────────────────────────────────────── */
+.pr-listbar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+.pr-listchip {
+  border: 1.5px solid var(--line);
+  background: #fff;
+  border-radius: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  text-align: left;
+  min-width: 150px;
+}
+.pr-listchip:hover { border-color: var(--navy); background: var(--wash); }
+.pr-listchip.on { border-color: var(--navy); background: #eef3fb; }
+.pr-listchip b { display: block; font-size: 0.88rem; color: var(--ink); }
+.pr-listchip span { display: block; font-size: 0.77rem; color: var(--muted); margin-top: 2px; }
+
+/* ── distress flags ──────────────────────────────────────────────────────── */
+.pr-flagbar { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 15px; align-items: center; }
+.pr-flagbar > .pr-lbl { font-size: 0.78rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700; }
+.pr-flagchip {
+  border: 1.5px solid var(--line);
+  background: #fff;
+  border-radius: 100px;
+  padding: 4px 11px;
+  font-size: 0.79rem;
+  font-weight: 700;
+  color: var(--body);
+  cursor: pointer;
+}
+.pr-flagchip:hover { border-color: var(--navy); }
+.pr-flagchip.on { background: var(--navy); border-color: var(--navy); color: #fff; }
+
+/* Row badges for the flags a prospect actually carries. Muted rather than
+   alarming: distress is why the row is on the list, not a warning about it. */
+.pr-tags { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px; }
+.pr-tag {
+  font-size: 0.71rem;
+  font-weight: 700;
+  border-radius: 4px;
+  padding: 1px 6px;
+  background: #eef1f6;
+  color: #4a5a73;
+  border: 1px solid #d5dde9;
+  white-space: nowrap;
+}
+/* Pre-foreclosure and tax delinquency are the two that put a clock on the
+   conversation, so they read differently from the rest. */
+.pr-tag.urgent { background: #fef4e0; color: #8a6100; border-color: #f5dfa8; }
+
+.pr-nowrap { white-space: nowrap; }
+.pr-dim { color: var(--muted); }
+
+/* ── detail ──────────────────────────────────────────────────────────────── */
+.pr-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+.pr-head h1 { font-size: 1.5rem; margin: 0; letter-spacing: -0.02em; }
+.pr-head .pr-sub { color: var(--muted); font-size: 0.88rem; }
+
+/* The skip-trace result. One row per line type because which one you dial is a
+   decision, not a detail: a mobile answered at 2pm on a Tuesday, a landline
+   rings an empty house, and a VoIP number is often the one a litigator seeds. */
+.pr-nums { display: grid; gap: 9px; }
+.pr-num {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 11px 13px;
+  background: #fff;
+}
+.pr-num .pr-kind {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 800;
+  color: var(--muted);
+  width: 64px;
+  flex-shrink: 0;
+}
+.pr-num .pr-e164 { font-size: 1rem; font-weight: 800; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
+.pr-num .pr-when { color: var(--muted); font-size: 0.8rem; }
+.pr-num .pr-spacer { flex: 1; }
+.pr-num.blocked { background: #fdf4f2; border-color: #f5c4bd; }
+
+.pr-callbtn {
+  display: inline-block;
+  background: var(--coral);
+  color: #fff;
+  border: 0;
+  border-radius: 7px;
+  padding: 8px 15px;
+  font-weight: 700;
+  font-size: 0.88rem;
+}
+.pr-callbtn:hover { background: var(--coral-deep); text-decoration: none; color: #fff; }
+.pr-callbtn.stopped { background: #efefef; color: #8a8a8a; cursor: not-allowed; }
+
+/* ── conversion ──────────────────────────────────────────────────────────
+ * The primary action on the detail page and styled as such — a bordered panel
+ * at the top rather than a button in a toolbar, because what it writes is a
+ * consent record and the operator should have to read something before they
+ * assert one.
+ */
+.pr-convert { border: 2px solid var(--navy); }
+.pr-convert > h2 { background: #eef3fb; color: var(--navy-ink); }
+.pr-convert .pr-legal {
+  border: 1px solid #f0dda6;
+  background: #fef8e8;
+  border-radius: 7px;
+  padding: 11px 13px;
+  font-size: 0.85rem;
+  color: #6b5100;
+  line-height: 1.5;
+  margin-bottom: 13px;
+}
+.pr-convert .pr-legal strong { color: #5a4100; }
+
+.pr-field { display: flex; flex-direction: column; gap: 5px; font-size: 0.82rem; font-weight: 700; color: var(--ink); margin-bottom: 12px; }
+.pr-field input, .pr-field select, .pr-field textarea {
+  padding: 8px 10px;
+  border: 1.5px solid var(--line);
+  border-radius: 7px;
+  background: #fff;
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 400;
+  color: var(--ink);
+}
+.pr-field input:focus, .pr-field select:focus, .pr-field textarea:focus {
+  outline: 0;
+  border-color: var(--navy);
+  box-shadow: 0 0 0 3px rgba(26, 68, 133, 0.13);
+}
+
+.pr-converted {
+  border: 1px solid #b7e0c4;
+  background: #e6f4ea;
+  border-radius: 8px;
+  padding: 13px 15px;
+  font-size: 0.88rem;
+  color: #0b6b34;
+}
+.pr-converted strong { display: block; color: #094f27; margin-bottom: 3px; }
+.pr-converted a { font-weight: 700; }
+
+/* ── logging what happened on the call ───────────────────────────────────── */
+.pr-outcomes { display: flex; flex-wrap: wrap; gap: 7px; }
+.pr-outcome {
+  border: 1.5px solid var(--line);
+  background: #fff;
+  border-radius: 100px;
+  padding: 6px 13px;
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: var(--body);
+  cursor: pointer;
+}
+.pr-outcome:hover:not(:disabled) { border-color: var(--navy); background: var(--wash); }
+.pr-outcome:disabled { opacity: 0.45; cursor: not-allowed; }
+.pr-outcome.good { border-color: #b7e0c4; color: #0b6b34; }
+.pr-outcome.good:hover:not(:disabled) { background: #e6f4ea; border-color: #0b6b34; }
+.pr-outcome.bad { border-color: #f5c4bd; color: #a11b0f; }
+.pr-outcome.bad:hover:not(:disabled) { background: #fdecea; border-color: #a11b0f; }
+
+.pr-raw {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.78rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0;
+  color: var(--body);
+  max-height: 260px;
+  overflow: auto;
+}
+
+@media (max-width: 900px) {
+  .pr-num .pr-kind { width: auto; }
+}

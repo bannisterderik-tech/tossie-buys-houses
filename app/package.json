@@ -9,8 +9,10 @@
     "preview": "vite preview"
   },
   "//": "React 18 and Vite 5 are pinned to match reoperative (~/Downloads/realtygrind) so its dialer, messages and SDR components port in without a framework migration on top of the port.",
+  "//softphone": "@twilio/voice-sdk is the one dependency the dialer could not be written without: a browser cannot originate a WebRTC leg into Twilio without their signalling client, and there is no smaller shim for it. Same ^2.18.1 range reoperative runs, so its BrowserDialer's hard-won workarounds (codec order, edge pinning, speakerDevices) apply here unchanged.",
   "dependencies": {
     "@supabase/supabase-js": "^2.39.0",
+    "@twilio/voice-sdk": "^2.18.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
   },

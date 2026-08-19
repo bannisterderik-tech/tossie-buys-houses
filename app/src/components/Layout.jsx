@@ -4,6 +4,11 @@ import { useRoute } from '../router.js';
 const NAV = [
   { to: '/today', label: 'Today' },
   { to: '/', label: 'Leads' },
+  // Its own item, next to Leads and never inside it. A prospect has no consent
+  // basis and cannot be texted at all, so the two are different objects with
+  // different permissions — one nav entry covering both would be the first step
+  // towards one screen covering both.
+  { to: '/prospects', label: 'Prospects' },
   { to: '/dialer', label: 'Dialer' },
   { to: '/messages', label: 'Messages' },
   { to: '/sdr', label: 'AI SDR' },

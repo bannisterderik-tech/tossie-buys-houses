@@ -247,3 +247,117 @@ WHERE pubname = 'supabase_realtime' AND schemaname = 'public'
 SELECT has_table_privilege('anon', 'public.sdr_conversations', 'SELECT') AS anon_reads_transcripts,
        has_table_privilege('anon', 'public.sdr_sends',         'SELECT') AS anon_reads_ledger,
        has_table_privilege('anon', 'public.sdr_settings',      'SELECT') AS anon_reads_settings;
+
+\echo '=== 15. a seller who texts in cold gets exactly one conversation ==='
+\echo '-- continue_conversation used to answer no_active_conversation and drop the'
+\echo '-- most valuable message this product can receive. It now opens one. These'
+\echo '-- are the rules of that open which SQL can hold.'
+\echo '--'
+\echo '-- WHAT THIS SUITE CANNOT TEST: the turn itself. The model call, the'
+\echo '-- prompt-injection scoring and the no-price output guardrail all live in'
+\echo '-- the edge function and need an Anthropic response to exercise, so nothing'
+\echo '-- below asserts them. They are covered by review and by the live probe.'
+INSERT INTO leads (id, team_id, name, phone_mobile, address, city, state, source,
+                   tcpa_opt_in, tcpa_opt_in_at)
+VALUES ('cccccccc-0000-4000-8000-000000000002',
+        '70551e00-0000-4000-8000-000000000001', 'Cold Inbound Seller', '9125552001',
+        '17 Bay St', 'Savannah', 'GA', 'inbound_sms', true, now())
+ON CONFLICT (id) DO NOTHING;
+
+\echo '-- The evidence the SDR requires before it will open anything: a real'
+\echo '-- inbound text on record for this lead, stored by the webhook first.'
+INSERT INTO sms_messages (team_id, lead_id, direction, from_e164, to_e164, body,
+                          status, twilio_sid)
+VALUES ('70551e00-0000-4000-8000-000000000001', 'cccccccc-0000-4000-8000-000000000002',
+        'inbound', '+19125552001', '+19125550100',
+        'I want to sell my house', 'received', 'SMphase4inbound0000000000000001')
+ON CONFLICT (twilio_sid) DO NOTHING;
+
+\echo '-- What openInboundConversation writes: no grace, due immediately.'
+INSERT INTO sdr_conversations (id, team_id, lead_id, step, grace_until, next_action_at)
+VALUES ('dddddddd-0000-4000-8000-000000000003',
+        '70551e00-0000-4000-8000-000000000001',
+        'cccccccc-0000-4000-8000-000000000002', 'pending', now(), now());
+
+\echo '-- A Twilio redelivery, an operator retry and a second webhook isolate all'
+\echo '-- arrive as that same INSERT. The unique index is the idempotency key: one'
+\echo '-- wins, the rest get 23505 and re-read the row that won.'
+DO $$
+DECLARE v_active integer;
+BEGIN
+  BEGIN
+    INSERT INTO sdr_conversations (team_id, lead_id, step, grace_until, next_action_at)
+    VALUES ('70551e00-0000-4000-8000-000000000001',
+            'cccccccc-0000-4000-8000-000000000002', 'pending', now(), now());
+    RAISE EXCEPTION 'FAIL: a redelivered inbound opened a second conversation';
+  EXCEPTION WHEN unique_violation THEN
+    NULL;  -- exactly what the function catches and turns into a re-read
+  END;
+
+  SELECT count(*) INTO v_active FROM sdr_conversations
+   WHERE lead_id = 'cccccccc-0000-4000-8000-000000000002' AND active;
+  IF v_active <> 1 THEN
+    RAISE EXCEPTION 'FAIL: % active conversations for one inbound seller', v_active;
+  END IF;
+  RAISE NOTICE 'PASS: one conversation per inbound seller, however often the webhook fires';
+END $$;
+
+\echo '-- ...and it is answerable now. The grace period is an outbound idea: it'
+\echo '-- holds a lead WE chose to contact so a human can claim it before a machine'
+\echo '-- speaks to someone who never asked to hear from us. A seller who just'
+\echo '-- texted in is holding the phone, so the row is opened already due and the'
+\echo '-- SDR takes the turn in the same request.'
+DO $$
+DECLARE v_answerable boolean;
+BEGIN
+  SELECT (grace_until <= now() AND next_action_at <= now()
+          AND active AND step = 'pending' AND claimed_by IS NULL)
+    INTO v_answerable
+    FROM sdr_conversations WHERE id = 'dddddddd-0000-4000-8000-000000000003';
+  IF NOT v_answerable THEN
+    RAISE EXCEPTION 'FAIL: an inbound-opened conversation is parked behind a grace window';
+  END IF;
+  RAISE NOTICE 'PASS: no grace period on a conversation the seller started';
+END $$;
+
+\echo '=== 16. opening a conversation does not open a shortcut to auto-send ==='
+\echo '-- resolveMode itself is in the edge function and has one caller, so SQL'
+\echo '-- cannot reach it. What SQL owns is the half of the gate it holds: a member'
+\echo '-- can set default_mode to auto all day and still cannot supply'
+\echo '-- teams.sdr_auto_send_approved, so every path — inbound-opened included —'
+\echo '-- resolves to draft and a human reads the words first.'
+BEGIN;
+-- Start from the shipped default whatever an earlier suite left set, and roll
+-- the whole section back so it leaves nothing behind for the next one either.
+UPDATE teams SET sdr_auto_send_approved = false
+ WHERE id = '70551e00-0000-4000-8000-000000000001';
+
+INSERT INTO allowed_signups (email) VALUES ('va@example.com') ON CONFLICT (email) DO NOTHING;
+INSERT INTO auth.users (id, email) VALUES ('aaaaaaaa-0000-4000-8000-000000000002', 'va@example.com')
+ON CONFLICT (id) DO NOTHING;
+
+SET LOCAL request.jwt.claim.sub = 'aaaaaaaa-0000-4000-8000-000000000002';
+SET LOCAL ROLE authenticated;
+
+DO $$
+BEGIN
+  UPDATE sdr_settings SET default_mode = 'auto'
+   WHERE team_id = '70551e00-0000-4000-8000-000000000001';
+  IF NOT EXISTS (
+    SELECT 1 FROM sdr_settings
+     WHERE team_id = '70551e00-0000-4000-8000-000000000001' AND default_mode = 'auto'
+  ) THEN
+    RAISE EXCEPTION 'FAIL: the fixture never armed the half of the gate a member does control';
+  END IF;
+
+  UPDATE teams SET sdr_auto_send_approved = true
+   WHERE id = '70551e00-0000-4000-8000-000000000001';
+  IF EXISTS (
+    SELECT 1 FROM teams
+     WHERE id = '70551e00-0000-4000-8000-000000000001' AND sdr_auto_send_approved
+  ) THEN
+    RAISE EXCEPTION 'FAIL: a plain member granted the SDR auto-send approval';
+  END IF;
+  RAISE NOTICE 'PASS: auto still needs the owner, so the resolve stays draft';
+END $$;
+ROLLBACK;

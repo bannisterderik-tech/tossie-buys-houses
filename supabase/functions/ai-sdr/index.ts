@@ -9,7 +9,9 @@
 // Actions (POST { action, ... }):
 //   initial_outreach      a lead arrived; open a conversation and start the clock
 //   check_grace           cron: grace expired, generate the first message
-//   continue_conversation the seller replied (called by the inbound SMS webhook)
+//   continue_conversation the seller replied, or texted us cold with no
+//                         conversation open yet (called by the inbound SMS
+//                         webhook); opens one in the second case
 //   run_drip              cron: follow up on conversations that went quiet
 //   claim_lead            a human takes over; the SDR stands down
 //   approve_draft         a human approves (or edits) a draft; this sends it
@@ -1126,6 +1128,80 @@ function blockedReason(
   return null;
 }
 
+// ─── the seller texted us first ─────────────────────────────────────────────
+// initial_outreach opens a conversation for leads WE decided to contact. Nobody
+// was opening one for a stranger who texts the business number cold, so
+// continue_conversation answered `no_active_conversation` and the single most
+// valuable message this product can receive was dropped by the SDR. This is the
+// other door, and it is here rather than in the webhook because the SDR owns
+// the decision about whether it may speak — a "create it first" branch in the
+// caller would be a second place that decides, and the second place is the one
+// that forgets a gate.
+//
+// THE GRACE PERIOD DOES NOT APPLY, and that is a decision rather than an
+// omission. sdr_settings.grace_period_seconds holds a NEW lead quiet so a human
+// watching the board can claim it before a machine speaks to someone who never
+// asked to hear from us. An inbound text inverts every premise of that: the
+// seller opened the conversation, they are holding the phone right now, and the
+// reply they are waiting for is one they asked for. The cost is worse than it
+// looks, too — grace on this path is not two minutes of silence but two minutes
+// plus however long until the next check_grace tick, and latency a lead who does
+// not know we exist never notices is latency a lead mid-conversation reads as
+// being ignored. It also buys nothing on the safety side that is not already
+// bought elsewhere: in draft mode a human reads every word before it goes, and
+// in either mode claim_lead stays open for the whole conversation. So grace_until
+// is now, and this request takes the first turn itself.
+//
+// Idempotency is the database's, not ours. sdr_conversations_one_active_idx is a
+// UNIQUE index on (lead_id) WHERE active — exactly the invariant wanted — so a
+// Twilio redelivery, an operator retry and two webhook isolates racing on the
+// same seller all collapse into one 23505 and one conversation. A read-then-
+// insert would let two of those three through. The conversation lock then
+// decides which caller actually replies; it cannot guard creation, because it
+// takes a conversation id that does not exist yet.
+async function openInboundConversation(
+  admin: any,
+  lead: Record<string, any>,
+  mode: 'draft' | 'auto',
+): Promise<
+  | { ok: true; conv: Record<string, any>; opened: boolean }
+  | { ok: false; reason: string }
+> {
+  const now = new Date().toISOString();
+  const { data, error } = await admin.from('sdr_conversations').insert({
+    team_id: lead.team_id,
+    lead_id: lead.id,
+    step: 'pending',
+    // Stored so the approval queue can show what this conversation WOULD do.
+    // executeTurn re-resolves it every turn regardless.
+    mode,
+    grace_until: now,
+    // Due immediately rather than null. This request is about to take the turn
+    // under the lock, so check_grace cannot race it — but if the model call
+    // fails and executeTurn returns before writing any state, the row is left at
+    // step 'pending' and the next cron tick picks it up instead of stranding the
+    // hottest lead type there is on a transient 500.
+    next_action_at: now,
+  }).select('*').single();
+
+  if (!error) return { ok: true, conv: data, opened: true };
+
+  if (String((error as any).code) !== '23505') {
+    return { ok: false, reason: `conversation_insert_failed: ${error.message}` };
+  }
+
+  // Somebody else opened it between our SELECT and our INSERT. Continue into it
+  // as an ordinary reply.
+  const { data: existing } = await admin.from('sdr_conversations')
+    .select('*').eq('lead_id', lead.id).eq('active', true).maybeSingle();
+  return existing
+    ? { ok: true, conv: existing, opened: false }
+    // The index fired but the row is gone: it was deactivated in the same
+    // instant. Retrying the insert would only race the same way, and there is
+    // nothing to continue.
+    : { ok: false, reason: 'conversation_closed_concurrently' };
+}
+
 // ─── HTTP ───────────────────────────────────────────────────────────────────
 Deno.serve(async (req) => {
   // Strict origin allow-list from _shared/cors.ts: an origin that is not ours
@@ -1258,7 +1334,8 @@ Deno.serve(async (req) => {
     }
 
     // ════════════════════════════════════════════════════════════════════════
-    // continue_conversation — the seller replied. Called by the SMS webhook.
+    // continue_conversation — the seller texted. Called by the SMS webhook.
+    // Continues the open conversation, or opens one when the seller started it.
     // ════════════════════════════════════════════════════════════════════════
     if (action === 'continue_conversation') {
       const inbound = String(body.inbound_message ?? '');
@@ -1269,9 +1346,47 @@ Deno.serve(async (req) => {
       if (!lead) return json({ error: 'lead_not_found' }, 404);
       if (!assertTeam(lead.team_id)) return json({ error: 'forbidden' }, 403);
 
-      const { data: conv } = await admin.from('sdr_conversations')
+      const { settings, teamName, ownerApproved } = await loadContext(admin, lead.team_id);
+
+      let { data: conv } = await admin.from('sdr_conversations')
         .select('*').eq('lead_id', lead.id).eq('active', true).maybeSingle();
-      if (!conv) return json({ ok: true, skipped: true, reason: 'no_active_conversation' });
+
+      // No conversation, because this seller texted in cold. Open one and take
+      // its first turn — see openInboundConversation for why there is no grace
+      // period and what makes this idempotent.
+      let openedInbound = false;
+      if (!conv) {
+        // Every gate first, and the same one function every other path uses:
+        // the team switch, this lead's own sdr_enabled, the SMS channel, DNC,
+        // litigator, trashed, lead_is_dialable and a phone to reply to. Somebody
+        // on the suppression list can still text you, and the answer is silence.
+        const gate = blockedReason(settings, lead);
+        if (gate) return json({ ok: true, skipped: true, reason: gate });
+
+        // Opening a conversation is only allowed off a real inbound message.
+        // The webhook stores the text before it notifies us, so this is always
+        // true for the path that matters; what it refuses is a caller that
+        // reached this action some other way and handed us a body it made up,
+        // which would otherwise be a way to make the SDR start texting a lead.
+        const { data: inboundOnRecord } = await admin.from('sms_messages')
+          .select('id').eq('lead_id', lead.id).eq('direction', 'inbound')
+          .gte('created_at', new Date(Date.now() - 86_400_000).toISOString())
+          .limit(1).maybeSingle();
+        if (!inboundOnRecord) return json({ ok: true, skipped: true, reason: 'no_inbound_on_record' });
+
+        const opened = await openInboundConversation(
+          admin, lead, resolveMode(lead.sdr_mode ?? settings.default_mode, ownerApproved),
+        );
+        if (!opened.ok) return json({ ok: true, skipped: true, reason: opened.reason });
+        conv = opened.conv;
+        openedInbound = opened.opened;
+
+        if (openedInbound) {
+          await logActivity(admin, lead, 'sdr_enrolled',
+            'Seller texted in first; SDR opened a conversation and answered without a grace period',
+            { trigger: 'inbound_sms', grace_seconds: 0 });
+        }
+      }
 
       // Record the reply before deciding whether to answer it. Even a
       // conversation a human has claimed should show what the seller said.
@@ -1290,7 +1405,6 @@ Deno.serve(async (req) => {
         pending_draft: null, pending_draft_at: null, pending_draft_hash: null,
       }).eq('id', conv.id);
 
-      const { settings, teamName, ownerApproved } = await loadContext(admin, lead.team_id);
       const blocked = blockedReason(settings, lead, conv);
       if (blocked) return json({ ok: true, skipped: true, reason: blocked });
 
@@ -1298,6 +1412,10 @@ Deno.serve(async (req) => {
       if (!claim.data) return json({ ok: true, skipped: true, reason: 'locked' });
       try {
         const step = conv.step === 'pending' ? 'greeting' : conv.step;
+        // Same choke point as every other path. executeTurn is where draft vs
+        // auto is resolved, where the seller's words are wrapped and scored, and
+        // where the price guardrail runs — an inbound-opened conversation gets
+        // no shortcut through any of it.
         const result = await executeTurn(admin, {
           lead,
           conv: { ...conv, messages },
@@ -1305,7 +1423,11 @@ Deno.serve(async (req) => {
           step,
           isDrip: false,
         });
-        return json(result);
+        return json(
+          openedInbound
+            ? { ...result, opened_conversation: true, conversation_id: conv.id }
+            : result,
+        );
       } finally {
         await admin.rpc('release_sdr_conversation_lock', { p_conv_id: conv.id, p_claim: claim.data });
       }

@@ -750,10 +750,65 @@ Deno.serve(async (req: Request) => {
     // Hand-rolled because Twilio's Node SDK does not run on the edge runtime.
     // It is a plain HS256 JWT signed with the API key secret; the `cty` header
     // is what tells Twilio it is an access token rather than an ordinary one.
+    //
+    // Four secrets, and three of them exist for nothing else in this system, so
+    // the first time the softphone is switched on at least one of them will be
+    // missing. This used to answer that with "voice sdk credentials are not
+    // configured", which names none of the four and sent somebody through the
+    // Twilio console, the Supabase secrets page and this file before finding out
+    // which one it was. The list below is the whole fix: say the variable names,
+    // spelled the way `supabase secrets set` spells them.
     if (body.action === 'token') {
-      if (!TWILIO_API_KEY_SID || !TWILIO_API_KEY_SECRET || !TWILIO_TWIML_APP_SID) {
-        return jsonResponse({ error: 'voice sdk credentials are not configured' }, cors, 503);
+      const required: Array<[string, string]> = [
+        // In the token's `sub` claim. The API key MUST have been created inside
+        // this same account or Twilio rejects the token in the browser with
+        // AccessTokenSignatureValidationFailed (31202) — a failure that looks
+        // like a signing bug and is really an account mismatch. Nothing on this
+        // side can see that mismatch, which is why the browser names 31202
+        // explicitly rather than reporting a generic device error.
+        ['TWILIO_ACCOUNT_SID', TWILIO_ACCOUNT_SID],
+        // Signs the token. Console → Account → API keys & tokens → Standard key.
+        ['TWILIO_API_KEY_SID', TWILIO_API_KEY_SID],
+        // Shown exactly once, when the key is created. There is no way to read
+        // it back afterwards; a lost secret means a new key.
+        ['TWILIO_API_KEY_SECRET', TWILIO_API_KEY_SECRET],
+        // The VoiceGrant's application_sid. Its Voice URL must point at THIS
+        // function or a browser-originated leg reaches Twilio and gets no TwiML,
+        // which presents as a call that rings forever and logs nothing.
+        ['TWILIO_TWIML_APP_SID', TWILIO_TWIML_APP_SID],
+      ];
+      const missing = required.filter(([, v]) => !v).map(([k]) => k);
+      if (missing.length > 0) {
+        console.error('[twilio-voice] token refused, unset secrets:', missing.join(', '));
+        return jsonResponse({
+          error: `The browser softphone is not configured: ${missing.join(', ')} ${missing.length === 1 ? 'is' : 'are'} not set on this function. Set ${missing.length === 1 ? 'it' : 'them'} with \`supabase secrets set\` and redeploy twilio-voice.`,
+          code: 'voice_not_configured',
+          missing,
+        }, cors, 503);
       }
+
+      // Prefix checks, because the four values above are opaque strings that get
+      // pasted between two consoles and swapping two of them produces a token
+      // Twilio rejects for a reason that names neither. A prefix is the one part
+      // of a Twilio SID that is checkable without a round trip: AC accounts, SK
+      // API keys, AP applications. This catches the paste error; it cannot catch
+      // an API key from the wrong account, which stays a 31202 in the browser.
+      const misfiled = ([
+        ['TWILIO_ACCOUNT_SID', TWILIO_ACCOUNT_SID, 'AC'],
+        ['TWILIO_API_KEY_SID', TWILIO_API_KEY_SID, 'SK'],
+        ['TWILIO_TWIML_APP_SID', TWILIO_TWIML_APP_SID, 'AP'],
+      ] as Array<[string, string, string]>)
+        .filter(([, v, prefix]) => !v.startsWith(prefix))
+        .map(([k, , prefix]) => `${k} should start with ${prefix}`);
+      if (misfiled.length > 0) {
+        console.error('[twilio-voice] token refused, malformed secrets:', misfiled.join('; '));
+        return jsonResponse({
+          error: `The browser softphone secrets are set but look wrong: ${misfiled.join('; ')}. Two of these are easy to swap in the Twilio console.`,
+          code: 'voice_misconfigured',
+          missing: [],
+        }, cors, 503);
+      }
+
       const identity = `agent_${user.id.replace(/-/g, '')}`;
       const now = Math.floor(Date.now() / 1000);
       const header = { alg: 'HS256', typ: 'JWT', cty: 'twilio-fpa;v=1' };
