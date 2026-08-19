@@ -68,8 +68,13 @@ post() {
   fi
 }
 
-post 'accepts a valid lead' \
-     '{"address":"1 Probe St, Savannah, GA 31401","name":"Deploy Probe","phone":"9125550000","email":"probe@example.com"}' 200
+     # This one WRITES A ROW into the live CRM, now that SUPABASE_SERVICE_KEY is
+     # set. That is the point — it is the only assertion that proves the whole
+     # chain rather than just the endpoint — but it means the probe leaves a
+     # lead behind, and a fake lead sitting in a real pipeline is worse than no
+     # test. Marked unmistakably and cleaned up below.
+post 'accepts a valid lead (writes a row)' \
+     '{"address":"1 Probe St, Savannah, GA 31401","name":"ZZ Deploy Probe","phone":"9125550000","email":"deploy-probe@invalid.test"}' 200
 post 'rejects a bad email' \
      '{"address":"1 Probe St","name":"X","phone":"9125550000","email":"nope"}' 400
 post 'rejects a short phone' \
@@ -80,6 +85,13 @@ post 'swallows a honeypot hit' \
 echo "▸ headers on /app"
 curl -s -D- -o /dev/null -L --max-time 15 "$BASE/app/" \
   | grep -iE 'x-robots-tag|x-frame-options|cache-control' | sed 's/^/  /'
+
+cat <<'CLEANUP'
+
+▸ this run left one probe lead in the live CRM — remove it with:
+    DELETE FROM public.leads WHERE email = 'deploy-probe@invalid.test';
+  (.test is a reserved TLD, so the address can never belong to a real seller.)
+CLEANUP
 
 [ $fail -eq 0 ] && echo "▸ deployment looks right" || echo "▸ DEPLOYMENT HAS PROBLEMS"
 exit $fail
