@@ -662,3 +662,110 @@ do the job — the board drags on native HTML5, not three `@dnd-kit` packages.
    about price before seeing the property, what he does with a lead whose house
    is already listed, and what he does with someone already under contract with
    another wholesaler.
+
+---
+
+# Part II — the wholesaler platform, end to end
+
+Written Aug 19, 2026, after Phases 0–5 shipped. Part I got the machine running.
+This is what is still missing between "it works" and "Tossie runs his business on
+it", in the order the constraints actually allow.
+
+## 10. The correction that reshapes the model: prospects are not leads
+
+The import page was built on a wrong assumption — that every imported list is
+cold. It hardcoded `tcpa_opt_in = false` with no way to say otherwise, and put a
+banner on the page asserting it. That is wrong for the case Tossie actually has:
+lists from his previous CRM where the seller *did* opt in. Refusing to record a
+consent that genuinely exists is the same failure as
+`lead_is_dialable`'s old `source = 'website'` rule — a rail that pushes people
+off the rails.
+
+But the opposite is worse, so the fix is not a checkbox that flips a boolean.
+**Prospects and leads are different objects and get different tables.**
+
+| | **Prospect** | **Lead** |
+|---|---|---|
+| What it is | a row on a purchased or scraped list | someone with a consent basis or a live conversation |
+| Consented? | no, and pretending otherwise is the expensive bug | yes, with provenance recorded |
+| May we call? | only after skip trace AND DNC + litigator scrub | yes, per `lead_is_dialable` |
+| May we text? | **no** | yes, if `consent_sms` |
+| SDR may work it? | no | yes |
+| Becomes a lead | when a human calls, makes contact, and logs consent | — |
+
+The conversion is the point. A prospect becomes a lead through a **human
+conversation**, never through a bulk action, because the thing being created is
+a consent record and a consent record needs a person who can say where it came
+from. `record_lead_consent()` already exists and already demands a source.
+
+This also fixes the import page honestly: it asks what kind of list this is.
+Opted-in lists become leads and must carry evidence. Everything else becomes
+prospects, where cold is not a warning banner but the actual data model.
+
+## 11. What is still missing
+
+Ordered by what blocks the most downstream work, not by size.
+
+### Tier 1 — the acquisition engine is incomplete without these
+
+1. **Prospects** — `prospects` table (reoperative's `cold_call_leads` ports
+   nearly verbatim and is already wholesaler-shaped: distress flags, skip-trace
+   output split by line type, call-status ladder), plus lists, plus the
+   conversion flow above.
+2. **Skip tracing + DNC/litigator scrub** — `functions/skip-trace` ports.
+   ~$0.044/lead all-in. The **litigator scrub matters more than the DNC scrub**:
+   serial TCPA plaintiffs seed their numbers onto exactly the absentee and
+   pre-foreclosure lists Tossie buys. Two-tenths of a cent to not call them is
+   the cheapest insurance in the build. Nothing may enter the dial queue without
+   it — already enforced by `lead_is_dialable`, still needs the provider wired.
+3. **Browser softphone + power dialer** — `@twilio/voice-sdk`, the token endpoint
+   (`twilio-voice` already has the action), 1–3 parallel lines into a conference,
+   AMD killing the losers. Today "call" is a `tel:` handoff to the desk phone,
+   which is not a dialer and does not scale past a few dozen calls a day.
+
+### Tier 2 — the deal actually closing
+
+4. **Contracts and e-sign** — purchase agreement and assignment agreement
+   generated from the deal, sent for signature, executed copy stored.
+   `ai-contract-parser` ports and auto-populates the dates that drive milestones.
+5. **The milestone worker** — `deal_milestones` and its escalating ladder exist
+   and nothing fires them. A reminder table nobody reads from is decoration.
+6. **Buyer portal** — tokenized public deal sheet, no login, `viewed` tracking.
+   This is what a dispo blast links to and how interest gets captured instead of
+   guessed at.
+
+### Tier 3 — knowing whether any of it works
+
+7. **Money dashboard** — cost per lead by source, cost per contract, assignment
+   fee pipeline vs collected, dispo funnel (blasted → viewed → interested →
+   offered → assigned). Right now Tossie cannot tell which marketing spend works.
+8. **Call recording + review** — recording is schema-ready and off by default.
+   FL is two-party consent and is in the footprint, so the disclosure is a
+   prerequisite, not a nicety.
+
+### Tier 4 — scale and channel breadth
+
+9. **Email channel** — needs SPF/DKIM/DMARC on `mail.tossiebuyshouses.com`,
+   never the root domain.
+10. **Direct mail**, **driving for dollars** mobile capture, **team roles and
+    round-robin** if Tossie hires acquisition managers.
+
+## 12. The A2P problem, restated because it gates Tier 1
+
+The verified campaign is **Low Volume Mixed**, described as appointment reminders
+and confirmations. That describes replying to inbound sellers and notifying
+buyers. It does not describe cold outreach, and carriers suspend campaigns whose
+traffic does not match the registration.
+
+So the honest split, which the product now enforces structurally rather than by
+warning text:
+
+- **Prospects cannot be texted at all.** Not a policy in the UI — they are a
+  different table with no consent basis, and every send path asks
+  `lead_is_dialable`.
+- **Cold contact is voice-first**, which needs no A2P and is what the dialer is
+  for.
+- **Texting is for people who texted first, opted in, or are buyers.**
+
+If Tossie wants cold SMS at volume, that is a second campaign with a truthful use
+case, registered separately. Worth his attorney's eye before the first send.
