@@ -184,7 +184,12 @@ export default function MessagesPage() {
     // operator should know the banner is guessing.
     Promise.all([
       supabase.from('telephony_settings').select('*').maybeSingle(),
-      supabase.from('phone_numbers').select('*').order('is_primary', { ascending: false }),
+      // Live numbers only. This list feeds the "sending from" banner, which
+      // exists to describe the number twilio-send-sms will actually pick — and
+      // that function filters released numbers out, so including them here
+      // would make the banner name a number the send would then refuse.
+      supabase.from('phone_numbers').select('*')
+        .is('released_at', null).order('is_primary', { ascending: false }),
       supabase.from('teams').select('sms_send_disabled').eq('id', TEAM_ID).maybeSingle(),
     ]).then(([s, n, t]) => {
       const failed = [s.error, n.error, t.error].find(Boolean);

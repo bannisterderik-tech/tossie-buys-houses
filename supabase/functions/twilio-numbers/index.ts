@@ -9,21 +9,24 @@
 // for every inbound webhook. A single transposed digit produces a row that
 // looks right, reads back right, and matches nothing Twilio ever posts.
 //
-// So: ask Twilio. Two actions, deliberately only two.
+// So: ask Twilio. Three actions, deliberately only three.
 //
 //   sync       READ-ONLY against Twilio. Lists the account's IncomingPhoneNumbers
 //              and upserts them into phone_numbers, keyed on e164. Touches
 //              nothing in the Twilio account.
 //   configure  WRITES to the Twilio account. Points one number's VoiceUrl and
 //              SmsUrl at this project's webhooks.
+//   release    DESTROYS a number on the Twilio account. Irreversible. Read the
+//              block above the handler before touching it.
 //
-// There is no search, no buy, no release and no subaccount provisioning. Tossie
-// owns one Twilio account and pays its own bill; numbers are bought by a person
-// in the console. reoperative's version of this file is 916 lines because it
-// resells telephony to other people's teams. None of that machinery has a job
-// here, and every line of it would be a line nobody maintains.
+// There is no search, no buy and no subaccount provisioning. Tossie owns one
+// Twilio account and pays its own bill; numbers are bought by a person in the
+// console. reoperative's version of this file is 916 lines because it resells
+// telephony to other people's teams — its release path decrements a Stripe
+// subscription item and juggles bundle allowances, none of which has a job
+// here. What was worth porting is one HTTP call and the 404 handling.
 //
-// WHY THE TWO ACTIONS ARE SEPARATE, and why 'sync' must never quietly do
+// WHY THE ACTIONS ARE SEPARATE, and why 'sync' must never quietly do
 // 'configure's work: sync is safe to run at any time, from anywhere, by anyone
 // who is curious — it only reads. configure rewrites live routing on the
 // customer's own Twilio account, and pointing a number's VoiceUrl at the wrong
@@ -31,6 +34,11 @@
 // would make the safe button the dangerous one, and the first person to find
 // out would be a caller. It stays an explicit, per-number, separately-labelled
 // action, and the UI says out loud that it changes settings in Twilio.
+//
+// The three actions sit on a ladder of consequence — sync reads, configure
+// changes something recoverable, release cannot be undone at all — and each one
+// asks for more before it acts. release is the only one that demands the
+// operator type the number out.
 //
 // SMS IS NEVER ENABLED BY A SYNC. capabilities.sms coming back true means the
 // carrier can carry a text on that line. It does not mean Tossie is permitted
@@ -49,6 +57,8 @@
 //
 // Request:  { action: 'sync' }
 //           { action: 'configure', number_id: '<phone_numbers.id>' }
+//           { action: 'release',   number_id: '<phone_numbers.id>',
+//                                  confirm_e164: '+1912…', reason?: 'why' }
 //
 // Refusal reasons, all machine-readable, all paired with a sentence the UI can
 // show verbatim:
@@ -63,6 +73,11 @@
 //   twilio_pagination_failed  a page after the first failed, so the list is partial
 //   number_not_found          number_id is not a row on this team
 //   number_missing_sid        the row has no twilio_sid; run a sync first
+//   confirmation_mismatch     release: confirm_e164 is not this number
+//   number_is_primary         release: designate a new primary first
+//   last_live_number          release: this is the only line left
+//   release_not_recorded      release: Twilio released it, the database did not
+//                             record it — the one state that needs a human
 //
 // Edge secrets (Supabase → Edge Functions → Secrets):
 //   TWILIO_ACCOUNT_SID
@@ -253,7 +268,7 @@ Deno.serve(async (req: Request) => {
     // ── What we already have ────────────────────────────────────────────────
     const { data: existingRows, error: existingErr } = await admin
       .from('phone_numbers')
-      .select('id, e164, friendly_name, twilio_sid, voice_enabled, sms_enabled, a2p_status, is_primary')
+      .select('id, e164, friendly_name, twilio_sid, voice_enabled, sms_enabled, a2p_status, is_primary, released_at')
       .eq('team_id', teamId);
     if (existingErr) {
       console.error('[twilio-numbers] existing numbers read failed:', existingErr.message);
@@ -355,6 +370,31 @@ Deno.serve(async (req: Request) => {
         continue;
       }
 
+      // ── A row this team released ──────────────────────────────────────────
+      // Twilio returned a number we have on file as released. That is not
+      // supposed to be possible — a released number left the account — so the
+      // only honest reading is that somebody bought it back, which does happen
+      // because a released number goes into a pool anyone can buy from.
+      //
+      // Not revived automatically. e164 is UNIQUE globally, so this row is also
+      // the reason a re-bought number cannot simply be re-added, and quietly
+      // clearing released_at would turn a number the app has told everyone is
+      // gone back into a live sending line with nobody having decided that.
+      // Named loudly instead, which is what the operator needs to act on.
+      if (existing.released_at) {
+        results.push({
+          id: existing.id,
+          e164,
+          friendly_name: friendlyName,
+          twilio_sid: n.sid,
+          capabilities: caps,
+          result: 'released',
+          message:
+            'This number is recorded as released, but the Twilio account returned it — so the account owns it again. Nothing was changed here. Someone has to decide whether it goes back into service.',
+        });
+        continue;
+      }
+
       // ── An existing row ───────────────────────────────────────────────────
       // Only the three facts Twilio is authoritative about are written:
       // friendly_name, twilio_sid, voice_enabled.
@@ -418,13 +458,22 @@ Deno.serve(async (req: Request) => {
     // destroy the record of what was said to a homeowner — but named, because
     // the usual cause is a number that was released in the console, and until
     // somebody knows that, it just looks like a line that stopped working.
+    //
+    // Numbers released THROUGH this app are excluded: they are absent from
+    // Twilio by design and already say so on their own row. Listing them here
+    // would put a permanent unexplained warning on every future sync, and a
+    // warning that is always on is a warning nobody reads when it means
+    // something.
     const seen = new Set(twilioNumbers.map((n) => n.phone_number));
-    const orphans = (existingRows ?? []).filter((r) => !seen.has(r.e164)).map((r) => r.e164);
+    const orphans = (existingRows ?? [])
+      .filter((r) => !seen.has(r.e164) && !r.released_at)
+      .map((r) => r.e164);
 
     const counts = {
       added: results.filter((r) => r.result === 'added').length,
       updated: results.filter((r) => r.result === 'updated').length,
       unchanged: results.filter((r) => r.result === 'unchanged').length,
+      released: results.filter((r) => r.result === 'released').length,
       failed: results.filter((r) => r.result === 'failed').length,
     };
 
@@ -538,6 +587,252 @@ Deno.serve(async (req: Request) => {
     }, cors, 200);
   }
 
+  // ══════════════════════════════════════════════════════════════════════════
+  // release — DESTROYS the number on the Twilio account. Cannot be undone.
+  // ══════════════════════════════════════════════════════════════════════════
+  // Twilio's DELETE on IncomingPhoneNumbers hands the number back to the pool
+  // it was bought from. Billing stops, which is the point, and everything else
+  // about it is loss: the number can be bought by anybody the same afternoon,
+  // and from then on every call and text a seller sends to it reaches a
+  // stranger who has no idea who Tossie is. There is no repurchase button and
+  // no guarantee the number is still there an hour later. Nothing else in this
+  // build is irreversible in that way.
+  //
+  // So the guardrails are sized to that rather than to the effort of the click:
+  //
+  //   confirm_e164 must match exactly. Typing the number IS the confirmation.
+  //     A yes/no dialog measures nothing except whether a button was pressed,
+  //     and the failure mode here is someone aiming for the row above.
+  //   not the primary. The primary is the number the business presents; silently
+  //     moving that badge would change which number sellers see replies from,
+  //     mid-conversation, with nobody having chosen the new one. Designating a
+  //     new primary first is a decision, and it is the operator's to make.
+  //   not the last live number. A team with zero live numbers cannot call or
+  //     text at all — every send path refuses — and an operator who meant to do
+  //     that is rare enough that asking is cheaper than the outage.
+  //   already released is a no-op, not an error. Two clicks, a double-submit or
+  //     a retried request should converge on released rather than produce a
+  //     scary failure for a state that is exactly what was wanted.
+  if (action === 'release') {
+    const numberId = typeof payload.number_id === 'string' ? payload.number_id : '';
+    const confirmE164 = typeof payload.confirm_e164 === 'string' ? payload.confirm_e164.trim() : '';
+    // Capped rather than validated. The column is unbounded text, and the point
+    // of the field is a sentence somebody reads back in six months — 500
+    // characters is far past that and short of anything a paste accident would
+    // put in a table nobody ever cleans up.
+    const reason = typeof payload.reason === 'string' && payload.reason.trim()
+      ? payload.reason.trim().slice(0, 500)
+      : null;
+
+    if (!numberId) {
+      return refuse(cors, 400, 'bad_request', 'number_id is required — release acts on one number at a time.');
+    }
+    if (!confirmE164) {
+      return refuse(cors, 400, 'bad_request',
+        'confirm_e164 is required. Releasing a number is permanent, so the number has to be typed out rather than agreed to.');
+    }
+
+    const { data: row, error: rowErr } = await admin
+      .from('phone_numbers')
+      .select('id, e164, twilio_sid, is_primary, released_at')
+      .eq('id', numberId)
+      .eq('team_id', teamId)
+      .maybeSingle();
+    if (rowErr) {
+      console.error('[twilio-numbers] number read failed:', rowErr.message);
+      return refuse(cors, 503, 'number_not_found',
+        'That number could not be read, so nothing was released. Try again shortly.');
+    }
+    if (!row) return refuse(cors, 404, 'number_not_found', 'That number is not on this team.');
+
+    // ── Already released ──────────────────────────────────────────────────
+    // Answered before the confirmation check on purpose. The number is gone;
+    // making the operator type it correctly to be told nothing needs doing is
+    // ceremony with nothing behind it.
+    if (row.released_at) {
+      return jsonResponse({
+        ok: true,
+        action: 'release',
+        number_id: row.id,
+        e164: row.e164,
+        already_released: true,
+        released_at: row.released_at,
+        twilio_status: null,
+        message: `${row.e164} was already released on ${row.released_at}. Nothing was sent to Twilio.`,
+      }, cors, 200);
+    }
+
+    // ── The confirmation ──────────────────────────────────────────────────
+    // Byte-exact against the stored E.164 rather than compared through
+    // phone_key(). Loosening it to "same last ten digits" would accept a
+    // different spelling of the number, and the whole job of this field is to
+    // prove the operator is looking at the number they think they are.
+    if (confirmE164 !== row.e164) {
+      return refuse(cors, 400, 'confirmation_mismatch',
+        `That does not match. To release this number, type it exactly as it is stored: ${row.e164}`,
+        { expected_e164: row.e164 });
+    }
+
+    if (row.is_primary) {
+      return refuse(cors, 409, 'number_is_primary',
+        `${row.e164} is this team's primary number. Make another number primary first — reassigning it automatically would change which number sellers see replies from, and that is not a side effect a release should have.`);
+    }
+
+    // Counted rather than inferred from what the page happened to be showing.
+    // The browser's list can be minutes stale, and the question being asked is
+    // "will this leave the business unable to contact anyone", which only the
+    // database can answer.
+    const { count: liveCount, error: countErr } = await admin
+      .from('phone_numbers')
+      .select('id', { count: 'exact', head: true })
+      .eq('team_id', teamId)
+      .is('released_at', null);
+    if (countErr) {
+      console.error('[twilio-numbers] live number count failed:', countErr.message);
+      return refuse(cors, 503, 'not_configured',
+        'The number of live lines could not be checked, so nothing was released. Try again shortly.');
+    }
+    // Read-then-act, so two releases fired at the same instant could both see
+    // two live numbers and both proceed. Not defended against with a lock: this
+    // is one operator on one account, the guard exists to catch a mistake
+    // rather than an attack, and a transaction spanning an irreversible Twilio
+    // call would be the worse trade — it would hold a database lock across a
+    // network round trip that cannot be rolled back anyway.
+    if ((liveCount ?? 0) <= 1) {
+      return refuse(cors, 409, 'last_live_number',
+        `${row.e164} is the only live number on this team. Releasing it would leave nothing to call or text from — every send and every dial would refuse. Buy a replacement in the Twilio console and sync it first.`);
+    }
+
+    if (!row.twilio_sid) {
+      // The SID is the only handle Twilio's API takes, so without it there is
+      // no way to actually release anything — and marking the row released
+      // anyway would produce the exact lie this action exists to avoid: a
+      // number that reads as gone here while it still bills and still rings.
+      return refuse(cors, 400, 'number_missing_sid',
+        `${row.e164} has no Twilio SID on file, so Twilio cannot be told to release it. Run "Sync from Twilio" first — that is where the SID comes from. Nothing was changed.`);
+    }
+
+    // ── ORDER OF OPERATIONS: TWILIO FIRST, DATABASE SECOND ────────────────
+    // This order is the whole design and it is not interchangeable.
+    //
+    // Marking the row released first and calling Twilio after leaves, on any
+    // failure in between, a number that is invisible to the app — hidden from
+    // the send path, hidden from the dialer, filed under "Released" on the
+    // settings page — while it is still on the account, still billing every
+    // month, and still ringing. Nobody is watching that line. A seller calls it
+    // and gets nothing; the bill keeps arriving; the app confidently says the
+    // number is gone. That state can persist for months because there is no
+    // symptom anybody looks at.
+    //
+    // Twilio first inverts the failure: if the database write fails after
+    // Twilio has released, the number is genuinely gone and the row still says
+    // live. That is wrong too — but it is wrong in the direction that shows up
+    // immediately (the next send from it errors) and it is recoverable by
+    // hand, and the response below says so explicitly rather than reporting
+    // success. One of these two is a silent money leak; the other is a loud
+    // inconsistency. Choose loud.
+    let twilioStatus = 0;
+    let twilioBody: Record<string, unknown> = {};
+    try {
+      const resp = await fetch(
+        `${TWILIO_ROOT}/2010-04-01/Accounts/${accountSid}/IncomingPhoneNumbers/${row.twilio_sid}.json`,
+        { method: 'DELETE', headers: { Authorization: twilioAuth(accountSid, authToken) } },
+      );
+      twilioStatus = resp.status;
+      // Twilio answers a successful DELETE with 204 and no body, so this is
+      // read as text and only parsed when there is something to parse —
+      // resp.json() on an empty body throws, and throwing here would report a
+      // release that actually happened as a failure.
+      const text = await resp.text();
+      if (text) {
+        try { twilioBody = JSON.parse(text); } catch { twilioBody = { message: text }; }
+      }
+    } catch (err) {
+      console.error('[twilio-numbers] Twilio release failed:', (err as Error)?.message);
+      return refuse(cors, 502, 'twilio_unreachable',
+        `Twilio did not answer, so ${row.e164} is still recorded as live here. The release may or may not have gone through — check the number in the Twilio console before trying again, because trying again on a number that was already released is harmless but assuming it failed is not.`);
+    }
+
+    // 404 means Twilio has no such number, which for a DELETE is the outcome we
+    // asked for arriving by a different route — released in the console, or a
+    // retry of a request that already succeeded. Converging to released beats
+    // deadlocking: refusing here would leave a row nothing can ever clear,
+    // permanently pinned live for a number the account does not own.
+    const releasedAtTwilio = twilioStatus === 204 || twilioStatus === 404 ||
+      (twilioStatus >= 200 && twilioStatus < 300);
+    if (!releasedAtTwilio) {
+      const detail = typeof twilioBody.message === 'string'
+        ? twilioBody.message
+        : 'Twilio refused the release.';
+      return refuse(cors, 502, 'twilio_error',
+        `${detail} ${row.e164} is unchanged — it is still on the account and still billing.`,
+        { twilio_status: twilioStatus, twilio_code: twilioBody.code ?? null });
+    }
+
+    // ── Now, and only now, the database ───────────────────────────────────
+    // A soft delete. The row stays forever because sms_messages.phone_number_id
+    // is ON DELETE SET NULL — see 20260819120000_number_release.sql. released_at
+    // is what takes it out of every operational path.
+    const { data: marked, error: markErr } = await admin
+      .from('phone_numbers')
+      .update({
+        released_at: new Date().toISOString(),
+        released_by: user.id,
+        release_reason: reason,
+      })
+      .eq('id', row.id)
+      .eq('team_id', teamId)
+      .select('id, e164, released_at');
+
+    if (markErr || !marked?.length) {
+      // The loud half of the failure mode described above. Reported as an error
+      // with the SID in it, because the fix is a human editing one row and they
+      // need to know which — and because reporting this as success would leave
+      // the app offering to release a number that no longer exists.
+      console.error('[twilio-numbers] released at Twilio but not recorded:',
+        row.e164, markErr?.message ?? 'no rows updated');
+      return refuse(cors, 500, 'release_not_recorded',
+        `${row.e164} WAS released at Twilio and is gone from the account, but this app failed to record it, so it still shows as live here. Do not try again — there is nothing left to release. The row needs marking released by hand.`,
+        { number_id: row.id, twilio_sid: row.twilio_sid, twilio_status: twilioStatus });
+    }
+
+    // telephony_settings.default_number_id is ON DELETE SET NULL, and nothing
+    // was deleted — so a default pointing at this number would survive the
+    // release and resolve, on every send, to a row the released_at filter then
+    // rejects. Cleared to NULL rather than repointed: "no default number" makes
+    // the send path refuse out loud, where quietly promoting some other number
+    // would text a seller from a line they have never seen. Reported, because a
+    // setting that changed itself needs saying.
+    const { data: clearedDefault } = await admin
+      .from('telephony_settings')
+      .update({ default_number_id: null })
+      .eq('team_id', teamId)
+      .eq('default_number_id', row.id)
+      .select('team_id');
+    const defaultWasCleared = Boolean(clearedDefault?.length);
+
+    return jsonResponse({
+      ok: true,
+      action: 'release',
+      number_id: row.id,
+      e164: row.e164,
+      twilio_sid: row.twilio_sid,
+      already_released: false,
+      released_at: marked[0].released_at,
+      release_reason: reason,
+      // Stated rather than implied. 404 and 204 both end as released, and the
+      // difference between "we released it" and "it was already gone" is worth
+      // showing to whoever is reading the result.
+      twilio_status: twilioStatus,
+      twilio_already_gone: twilioStatus === 404,
+      default_number_cleared: defaultWasCleared,
+      live_numbers_remaining: Math.max((liveCount ?? 1) - 1, 0),
+      message: twilioStatus === 404
+        ? `${row.e164} was already gone from the Twilio account, so it is now recorded as released here too. Its messages and calls are kept.`
+        : `${row.e164} has been released back to Twilio's pool. Billing for it stops. It cannot be recovered, and its messages and calls are kept.`,
+    }, cors, 200);
+  }
+
   return refuse(cors, 400, 'bad_request',
-    `Unknown action "${action}". This function does two things: "sync" (read Twilio, update the app) and "configure" (point one number's webhooks at this app).`);
+    `Unknown action "${action}". This function does three things: "sync" (read Twilio, update the app), "configure" (point one number's webhooks at this app) and "release" (permanently give a number back to Twilio).`);
 });

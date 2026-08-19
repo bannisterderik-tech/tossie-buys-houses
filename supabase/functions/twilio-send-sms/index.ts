@@ -346,10 +346,18 @@ Deno.serve(async (req: Request) => {
   // primary. The dialer and the SDR pin one so a conversation keeps the same
   // From across every message — a seller who gets replies from three different
   // numbers reports all three as spam.
+  //
+  // released_at IS NULL is applied to all three, including the pinned-id case.
+  // A released number is not ours any more — it is back in Twilio's pool and
+  // may already belong to somebody else — so a send from it would either fail
+  // at Twilio or, worse, be attributed to a stranger's line. The SDR and the
+  // dialer pin a number id and can hold a stale one across a release, which is
+  // exactly why the filter cannot live only on the fallback branches.
   let numberQuery = admin
     .from('phone_numbers')
     .select('id, e164, sms_enabled, a2p_status')
-    .eq('team_id', teamId);
+    .eq('team_id', teamId)
+    .is('released_at', null);
 
   if (fromNumberId) numberQuery = numberQuery.eq('id', fromNumberId);
   else if (settings?.default_number_id) numberQuery = numberQuery.eq('id', settings.default_number_id);
@@ -358,8 +366,14 @@ Deno.serve(async (req: Request) => {
   const { data: fromNumber } = await numberQuery.limit(1).maybeSingle();
 
   if (!fromNumber) {
+    // The pinned case gets its own sentence. "No sending number is configured"
+    // is actively misleading when the team has several — the caller named one
+    // that has since been released, and telling them to go add a number sends
+    // them to a settings page that already looks fine.
     return refuse(cors, 400, 'no_sending_number',
-      'No sending number is configured. Add one in telephony settings.');
+      fromNumberId
+        ? 'The number this conversation sends from is no longer available — it was released back to Twilio, or it is not on this team. Nothing was sent.'
+        : 'No sending number is configured. Add one in telephony settings.');
   }
   // sms_enabled defaults false and a2p_status defaults 'not_started': a number
   // is voice-only until A2P clears and someone deliberately turns texting on.

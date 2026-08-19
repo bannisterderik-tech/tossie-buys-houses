@@ -21,9 +21,18 @@ import { formatPhone, fullDate } from '../lib/format.js';
  *   app                     number, deliberately not part of the sync, and
  *                           deliberately labelled as changing something over
  *                           there rather than here.
+ *   Release this number     destroys the number on the Twilio account. The only
+ *                           irreversible thing on this page, and the only
+ *                           control that makes you type the number out.
  *
  * Buying a number and filing A2P registration still happen in the Twilio
  * console; nothing on this page does either.
+ *
+ * The three controls sit on a ladder of consequence and are styled down it on
+ * purpose: sync is a normal button, the webhook action is a chip behind its own
+ * rule, and release is a plain link that opens a panel nobody reaches by
+ * accident. A destructive control that looks like the button next to it is how
+ * somebody releases the wrong line while aiming for "Make primary".
  *
  * The A2P section gets more words than anything else on purpose. "Pending" is
  * the state that generates every "why aren't my texts sending" question, and the
@@ -133,6 +142,10 @@ export default function PhoneSettingsPage() {
 
   const load = useCallback(async () => {
     const [n, s, t] = await Promise.all([
+      // Released numbers are read too, not filtered out. They are shown in
+      // their own quiet section further down: a number that disappeared with no
+      // trace is how somebody concludes the app lost their data, and the
+      // released row is the only place the date and the reason are written.
       supabase.from('phone_numbers').select('*')
         .order('is_primary', { ascending: false }).order('created_at'),
       supabase.from('telephony_settings').select('*').eq('team_id', TEAM_ID).maybeSingle(),
@@ -242,14 +255,21 @@ export default function PhoneSettingsPage() {
 
   if (loading) return <div className="empty">Loading…</div>;
 
+  // One query, two lists. Everything operational — the header count, the "Send
+  // from" dropdown, the empty state, the release guardrails — is about live
+  // numbers. Released ones exist on this page only to be read.
+  const live = numbers.filter((n) => !n.released_at);
+  const released = numbers.filter((n) => n.released_at);
+
   return (
     <>
       <header>
         <h1>Phone</h1>
         <span className="count">
           {readFailed && numbers.length === 0 ? 'not loaded'
-            : numbers.length === 0 ? 'no numbers yet'
-            : `${numbers.length} number${numbers.length === 1 ? '' : 's'}`}
+            : live.length === 0 ? 'no live numbers'
+            : `${live.length} number${live.length === 1 ? '' : 's'}`}
+          {released.length > 0 && `, ${released.length} released`}
         </span>
       </header>
 
@@ -296,20 +316,42 @@ export default function PhoneSettingsPage() {
           </div>
         ) : numbers.length === 0 ? <NoNumbers onAdded={load} /> : (
           <>
-            {numbers.map((n) => (
+            {/* Every number released and none left. Not the "nothing set up
+                yet" wizard — this account demonstrably was set up — and not a
+                silent empty list either, because in this state every send and
+                every dial refuses and the reason is not visible anywhere else. */}
+            {live.length === 0 && (
+              <div className="banner stop" style={{ margin: '0 17px 14px' }}>
+                <strong>Every number on this team has been released.</strong>
+                Nothing can call or text until a number is bought in the Twilio
+                console and synced back in. The released numbers are listed below;
+                they cannot be recovered.
+              </div>
+            )}
+            {live.map((n) => (
               <PhoneRow
                 key={n.id}
                 number={n}
+                liveCount={live.length}
                 onPatch={(fields) => patchNumber(n.id, fields)}
                 onMakePrimary={() => makePrimary(n.id)}
+                onReleased={load}
               />
             ))}
             <div className="body" style={{ borderTop: '1px solid var(--line)' }}>
-              <AddNumber onAdded={load} isFirst={false} />
+              {/* claimPrimary is about live numbers, not about rows. A team
+                  whose only numbers are released has no primary — releasing
+                  the primary is refused, so this takes something out of band
+                  to reach, but if it is reached, the number recorded next has
+                  to claim the badge or the send path finds no default and
+                  refuses with nothing on screen explaining why. */}
+              <AddNumber onAdded={load} isFirst={false} claimPrimary={live.length === 0} />
             </div>
           </>
         )}
       </div>
+
+      {released.length > 0 && <ReleasedNumbers numbers={released} />}
 
       {settings === null ? (
         <div className="card">
@@ -352,7 +394,11 @@ export default function PhoneSettingsPage() {
                         text, because the send path refuses it. Saying so in the
                         option beats finding out from a refusal on the first
                         message a seller was supposed to get. */}
-                    {numbers.map((n) => (
+                    {/* Live only. twilio-send-sms and twilio-voice both filter
+                        released numbers out of the from-number lookup, so
+                        offering one here would let the operator select a value
+                        that every send then refuses. */}
+                    {live.map((n) => (
                       <option key={n.id} value={n.id}>
                         {formatPhone(n.e164)}
                         {n.friendly_name ? ` · ${n.friendly_name}` : ''}
@@ -509,7 +555,7 @@ export default function PhoneSettingsPage() {
 
 /* ── one number ─────────────────────────────────────────────────────────── */
 
-function PhoneRow({ number: n, onPatch, onMakePrimary }) {
+function PhoneRow({ number: n, liveCount, onPatch, onMakePrimary, onReleased }) {
   const a2p = A2P[n.a2p_status] ?? A2P.not_started;
   // The database does not stop sms_enabled going true on an unregistered
   // number, and neither does this checkbox once A2P says approved — it only
@@ -601,6 +647,210 @@ function PhoneRow({ number: n, onPatch, onMakePrimary }) {
       </dl>
 
       <WebhookAction number={n} />
+      <ReleaseAction number={n} liveCount={liveCount} onReleased={onReleased} />
+    </div>
+  );
+}
+
+/* ── give a number back to Twilio ───────────────────────────────────────── */
+
+/**
+ * The only irreversible control in the app.
+ *
+ * Releasing hands the number back to the pool Twilio sold it from. Billing
+ * stops — which is the reason anybody wants this — and everything else about it
+ * is loss. Somebody else can buy that number the same afternoon, and from then
+ * on every seller who calls or texts it reaches a stranger who has never heard
+ * of Tossie. There is no repurchase button, and no promise the number is still
+ * available a minute later.
+ *
+ * Three deliberate choices, all of which cost a click and are worth it:
+ *
+ * 1. COLLAPSED, AND STYLED DOWN. A plain link, below the rule, below the Twilio
+ *    webhook action. Nothing about it reads as the next step. The realistic
+ *    accident here is not somebody deciding wrongly, it is somebody aiming for
+ *    "Make primary" on the row above.
+ * 2. TYPE THE NUMBER. A yes/no dialog measures nothing except that a button was
+ *    pressed; every operator has clicked through one while thinking about
+ *    something else. Transcribing the number is a few seconds of attention
+ *    aimed at the exact fact that matters — which number this is. The server
+ *    checks it again, byte for byte, so this is not the only gate.
+ * 3. SAY THE CONSEQUENCES BEFORE, NOT AFTER. All of them, in the panel, in
+ *    plain words — including the one people do not expect (a stranger receives
+ *    what is sent to it afterwards) and the one that reassures (the message
+ *    history is kept). An "are you sure?" that does not say what happens is
+ *    just a speed bump.
+ *
+ * The two conditions the server refuses on — primary, and last live number —
+ * are also checked here, so the panel can explain them instead of opening onto
+ * a control that only produces an error. The server check is the real one:
+ * this list can be minutes stale.
+ */
+function ReleaseAction({ number: n, liveCount, onReleased }) {
+  const [open, setOpen] = useState(false);
+  const [typed, setTyped] = useState('');
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+
+  // Byte-exact against the stored E.164, the same comparison the edge function
+  // makes. Not compared loosely against the formatted version on screen: the
+  // point of the field is to confirm which number this is, and accepting a
+  // second spelling of it would weaken the one thing it checks.
+  const confirmed = typed.trim() === n.e164;
+
+  const blocked = n.is_primary
+    ? 'This is the primary number. Make another number primary first — releasing this one would change which number sellers see replies from, and that is not something a release should decide.'
+    : liveCount <= 1
+      ? 'This is the only live number on this team. Releasing it would leave nothing to call or text from: every send and every dial would refuse. Buy a replacement in the Twilio console and sync it in first.'
+      : null;
+
+  async function run() {
+    setBusy(true);
+    setErr(null);
+    const { data, error } = await supabase.functions.invoke('twilio-numbers', {
+      body: {
+        action: 'release',
+        number_id: n.id,
+        confirm_e164: typed.trim(),
+        reason: reason.trim() || undefined,
+      },
+    });
+    if (error) {
+      setErr(await explainInvokeError(error, 'The number was not released and the server gave no reason.'));
+      setBusy(false);
+      return;
+    }
+    if (data?.ok === false) {
+      setErr(data.message || 'The number was not released and the server gave no reason.');
+      setBusy(false);
+      return;
+    }
+    // No success banner here on purpose: the row this panel lives in is about
+    // to stop existing in the live list. The reload moves the number down into
+    // the Released section, which is a clearer statement of what happened than
+    // a green tick on a row that is going away.
+    setBusy(false);
+    setOpen(false);
+    setTyped('');
+    setReason('');
+    onReleased?.();
+  }
+
+  if (!open) {
+    return (
+      <div className="releasebar">
+        <button className="linkbtn danger" onClick={() => setOpen(true)}>
+          Release this number…
+        </button>
+        <span className="fine">Permanently gives {formatPhone(n.e164)} back to Twilio and stops its billing.</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="releasepanel">
+      <strong>Release {formatPhone(n.e164)}?</strong>
+
+      <ul className="consequences">
+        <li>The number is <strong>released at Twilio</strong> and leaves this account. Billing for it stops.</li>
+        <li><strong>This cannot be undone.</strong> There is no button anywhere that gets it back.</li>
+        <li>It returns to Twilio's pool and <strong>someone else can buy it</strong>, possibly today.</li>
+        <li>
+          Any call or text sent to it afterwards <strong>reaches a stranger</strong> — a seller
+          returning a call from this number will be talking to whoever owns it next.
+        </li>
+        <li>
+          Message threads and call history are <strong>kept</strong>, still attached to this
+          number. Nothing said to a homeowner is erased.
+        </li>
+      </ul>
+
+      {blocked ? (
+        <div className="banner warn">
+          <strong>Not right now.</strong>
+          {blocked}
+        </div>
+      ) : (
+        <>
+          <label className="releasefield">
+            Type <code>{n.e164}</code> to confirm
+            <input
+              value={typed}
+              onChange={(e) => setTyped(e.target.value)}
+              placeholder={n.e164}
+              autoComplete="off"
+              spellCheck="false"
+            />
+          </label>
+          <label className="releasefield">
+            Why (optional, kept with the record)
+            <input
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="consolidating onto one line"
+            />
+          </label>
+        </>
+      )}
+
+      {err && <div className="err" style={{ marginTop: 11 }}>{err}</div>}
+
+      <div className="confirmbtns" style={{ marginTop: 13 }}>
+        {!blocked && (
+          <button className="btn danger" onClick={run} disabled={!confirmed || busy}>
+            {busy ? 'Releasing at Twilio…' : `Release ${n.e164} permanently`}
+          </button>
+        )}
+        <button
+          className="btn ghost"
+          onClick={() => { setOpen(false); setTyped(''); setReason(''); setErr(null); }}
+          disabled={busy}
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ── numbers that are gone ──────────────────────────────────────────────── */
+
+/**
+ * Shown rather than hidden, and quiet rather than absent.
+ *
+ * The alternative — filtering released numbers out of the page entirely — is
+ * how somebody concludes the app lost their data: a line they remember is
+ * simply not there, with nothing saying where it went. This card is also the
+ * only place the release date and the stated reason are written down, and the
+ * only place that says the threads survived, which is the first question anyone
+ * asks after releasing a number they had been texting from.
+ *
+ * Nothing here is actionable, so nothing here is a control.
+ */
+function ReleasedNumbers({ numbers }) {
+  return (
+    <div className="card released">
+      <h2>Released</h2>
+      <p className="cardnote">
+        Given back to Twilio and gone from the account. These cannot be recovered
+        and cannot send or receive anything. They are listed because their message
+        threads and call history are still filed against them.
+      </p>
+      {numbers.map((n) => (
+        <div className="releasedrow" key={n.id}>
+          <div className="line">
+            <span className="e164">{formatPhone(n.e164)}</span>
+            {n.friendly_name && <span className="nick">{n.friendly_name}</span>}
+            <span className="spacer" />
+            <span className="badge dead">Released</span>
+          </div>
+          <div className="fine">
+            Released {fullDate(n.released_at)}
+            {n.release_reason ? ` — ${n.release_reason}` : ''}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -686,14 +936,18 @@ function WebhookAction({ number: n }) {
  * that reports nothing at all looks like a sync that did not run.
  */
 function SyncReport({ result }) {
-  const TONE = { added: 'ok', updated: 'ok', unchanged: 'cold', failed: 'stop' };
-  const { added = 0, updated = 0, unchanged = 0, failed = 0 } = result.counts ?? {};
+  // `released` is amber rather than red: it is not a failure, it is Twilio
+  // returning a number this app has on file as gone — which means the account
+  // owns it again and somebody has a decision to make.
+  const TONE = { added: 'ok', updated: 'ok', unchanged: 'cold', released: 'warm', failed: 'stop' };
+  const { added = 0, updated = 0, unchanged = 0, released = 0, failed = 0 } = result.counts ?? {};
 
   return (
     <div className="body syncreport">
       <strong style={{ fontSize: '0.9rem' }}>
         Read {result.twilio_count} number{result.twilio_count === 1 ? '' : 's'} from Twilio
         {' · '}{added} added, {updated} updated, {unchanged} unchanged
+        {released ? `, ${released} back from released` : ''}
         {failed ? `, ${failed} failed` : ''}
       </strong>
 
@@ -787,7 +1041,7 @@ function NoNumbers({ onAdded }) {
  * point a webhook anywhere. Typing a number here that the account does not own
  * produces a row that nothing will ever match.
  */
-function AddNumber({ onAdded, isFirst }) {
+function AddNumber({ onAdded, isFirst, claimPrimary = isFirst }) {
   const [open, setOpen] = useState(isFirst);
   const [e164, setE164] = useState('');
   const [name, setName] = useState('');
@@ -811,10 +1065,10 @@ function AddNumber({ onAdded, isFirst }) {
       team_id: TEAM_ID,
       e164: value,
       friendly_name: name.trim() || null,
-      // First number on the account becomes primary, because one number that is
-      // nobody's primary is a configuration trap: the send path finds no default
-      // and refuses, with nothing on screen explaining why.
-      is_primary: isFirst,
+      // First LIVE number on the account becomes primary, because one number
+      // that is nobody's primary is a configuration trap: the send path finds no
+      // default and refuses, with nothing on screen explaining why.
+      is_primary: claimPrimary,
     });
     setBusy(false);
     if (error) {

@@ -374,6 +374,140 @@ p.fine { margin: 8px 0 0; }
 .hookurls { display: grid; gap: 3px; margin-top: 5px; font-size: 0.82rem; }
 .hookurls code { word-break: break-all; }
 
+/* ── releasing a number ───────────────────────────────────────────────────
+   The only irreversible control in the app, and deliberately the quietest.
+   It sits last in the row, below the Twilio webhook action, as a plain link
+   rather than a button — because the realistic accident is not somebody
+   deciding wrongly, it is somebody aiming for "Make primary" two rows up and
+   hitting whatever is nearby. Red text is the whole affordance until it is
+   opened; a red BUTTON would compete for the eye with the safe controls, which
+   is the opposite of what a destructive action should do. */
+.releasebar {
+  margin-top: 11px; padding-top: 10px; border-top: 1px dashed var(--line);
+  display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap;
+}
+.linkbtn {
+  background: none; border: 0; padding: 0; cursor: pointer;
+  font-size: 0.83rem; font-weight: 600; color: var(--muted); text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.linkbtn.danger { color: #a11b0f; }
+.linkbtn:hover { text-decoration: none; }
+
+/* Once opened it stops being quiet. The panel is the one place the operator
+   reads what is about to happen, so it gets the loudest treatment on the page
+   — the same coral rule as .confirm, plus room for the list. */
+.releasepanel {
+  margin-top: 11px; border: 1.5px solid #a11b0f; background: #fdecea;
+  border-radius: 10px; padding: 14px 16px;
+}
+.releasepanel > strong { display: block; font-size: 0.95rem; color: #8c1a10; }
+
+/* The consequences, one per line. A paragraph would be skimmed as a block and
+   the two sentences people most need — it cannot be undone, and a stranger
+   receives what is sent to it afterwards — are exactly the ones a skim drops. */
+.consequences { margin: 9px 0 13px; padding-left: 19px; font-size: 0.86rem; color: var(--body); }
+.consequences li { margin-bottom: 5px; }
+.consequences li:last-child { margin-bottom: 0; }
+
+.releasefield { display: block; font-size: 0.82rem; font-weight: 600; color: var(--body); margin-bottom: 10px; }
+.releasefield code {
+  background: #fff; border: 1px solid #f5c4bd; border-radius: 5px;
+  padding: 1px 5px; font-size: 0.85rem; color: #8c1a10;
+}
+.releasefield input {
+  display: block; width: 100%; max-width: 320px; margin-top: 5px;
+  padding: 8px 11px; border: 1.5px solid #f5c4bd; border-radius: 8px;
+  font: inherit; font-size: 0.9rem; color: var(--ink); background: #fff;
+}
+.releasefield input:focus { outline: 0; border-color: #a11b0f; box-shadow: 0 0 0 3px rgba(161,27,15,0.14); }
+
+.btn.danger { background: #a11b0f; }
+.btn.danger:hover:not(:disabled) { background: #8c1a10; }
+
+/* Shown, not hidden — a number that vanished with no trace is how somebody
+   concludes the app lost their data. Muted all the way through, because there
+   is nothing here anyone can do; it is a record, not a section of the app. */
+.card.released { background: var(--wash); }
+.card.released > h2 { color: var(--muted); }
+.releasedrow { padding: 12px 17px; border-bottom: 1px solid var(--line); }
+.releasedrow:last-child { border-bottom: 0; }
+.releasedrow .line { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.releasedrow .e164 { font-size: 0.97rem; font-weight: 700; color: var(--muted); }
+.releasedrow .nick { color: var(--muted); font-size: 0.85rem; }
+.releasedrow .spacer { flex: 1; }
+
+/* ── taking a lead back off do-not-call ───────────────────────────────────
+   Two controls in one card that must never read as the same kind of thing.
+
+   The flag control (.repairbar / .repairpanel) is styled like the rest of the
+   app: a muted link, and a panel with the ordinary navy-and-white treatment
+   every other form on the page uses. Removing an internal flag somebody set by
+   mis-tapping is ordinary work and should look ordinary.
+
+   The opt-out control (.stoprepair) is red before anyone has clicked anything,
+   because the fact it carries — this person texted STOP — is worth reading even
+   by an operator who has no intention of touching it. That is the opposite of
+   .releasebar on the phone settings page, and deliberately: there the danger is
+   hitting the wrong control while aiming for its neighbour, so quiet is safest.
+   Here the danger is treating a seller's STOP as the same class of mistake as a
+   mis-tap, so the two must not be able to be skimmed as a pair. */
+.repairbar {
+  margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line);
+  display: grid; gap: 3px;
+}
+
+.repairpanel {
+  margin-top: 14px; padding: 13px 15px; border-radius: 10px;
+  border: 1.5px solid var(--line); background: var(--wash);
+}
+.repairpanel > strong { display: block; font-size: 0.93rem; }
+.repairpanel p.fine { margin: 6px 0 0; }
+
+.repairfield {
+  display: block; margin-top: 12px;
+  font-size: 0.82rem; font-weight: 600; color: var(--body);
+}
+.repairfield input {
+  display: block; width: 100%; margin-top: 5px;
+  padding: 8px 11px; border: 1.5px solid var(--line); border-radius: 8px;
+  font: inherit; font-size: 0.9rem; font-weight: 400; color: var(--ink); background: #fff;
+}
+.repairfield input:focus {
+  outline: 0; border-color: var(--navy); box-shadow: 0 0 0 3px rgba(26,68,133,0.13);
+}
+.repairfield.stop input { border-color: #f5c4bd; }
+.repairfield.stop input:focus { border-color: #a11b0f; box-shadow: 0 0 0 3px rgba(161,27,15,0.14); }
+.repairfield code {
+  background: #fff; border: 1px solid #f5c4bd; border-radius: 5px;
+  padding: 1px 5px; font-size: 0.85rem; color: #8c1a10;
+}
+
+.repairpanel .confirmbtns, .stoprepair .confirmbtns { margin-top: 13px; }
+
+.stoprepair {
+  margin-top: 14px; padding: 13px 15px; border-radius: 10px;
+  border: 1.5px solid #a11b0f; background: #fdecea;
+}
+.stoprepair > strong { display: block; font-size: 0.93rem; color: #8c1a10; }
+.stoprepair p.fine { margin: 6px 0 11px; color: var(--body); }
+.stoprepair .consequences { margin: 11px 0 0; }
+
+/* Smaller than the confirm button it opens onto: this one only says "show me
+   what this involves", and the commitment is the one at the bottom. */
+.btn.danger.sm { padding: 7px 13px; font-size: 0.85rem; }
+
+/* The record, kept visible long after the thing it records stopped mattering.
+   Muted, because nothing here is actionable — but present, because a cleared
+   STOP that leaves no mark is a thing that quietly happened once. */
+.restorelog { margin-top: 15px; padding-top: 13px; border-top: 1px solid var(--line); }
+.restorelog > strong {
+  display: block; font-size: 0.75rem; text-transform: uppercase;
+  letter-spacing: 0.07em; color: var(--muted);
+}
+.restorelog .timeline li { font-size: 0.85rem; }
+.restorelog .why { display: block; color: var(--body); font-size: 0.82rem; margin-top: 2px; }
+
 /* ── dialer ───────────────────────────────────────────────────────────── */
 .oncall > .body { display: grid; gap: 15px; }
 .oncall-head { display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; }

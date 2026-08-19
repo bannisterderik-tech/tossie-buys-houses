@@ -589,6 +589,13 @@ Deno.serve(async (req: Request) => {
         // it — the number stops being found and real sellers hear "this number
         // is not in service" — so the ILIKE does the narrowing and phone_key
         // still decides, the same two-step every other Twilio match uses.
+        //
+        // NOT filtered by released_at, unlike every outbound path. A released
+        // number should never route here again — Twilio hands it to whoever
+        // bought it — but if one somehow does, the call still has to be logged
+        // against the right team, and dropping an inbound to a number we
+        // demonstrably used is the failure that costs the most. Inbound is
+        // permissive on purpose; twilio-webhook takes the same position.
         const toKey = phoneKey(to);
         const numPattern = toKey && toKey.length === 10
           ? `*${toKey.slice(0, 3)}*${toKey.slice(3, 6)}*${toKey.slice(6)}*`
@@ -818,6 +825,12 @@ Deno.serve(async (req: Request) => {
       // Which of our numbers to call from: the configured default, else the
       // primary, else any voice-enabled number. Refuse rather than let Twilio
       // pick, because the number a seller sees is the number they call back.
+      //
+      // Released numbers are excluded at the query, not filtered later. The
+      // last branch here is "any voice-enabled number", which is precisely the
+      // branch that would have reached for a released row — and the number a
+      // seller sees is the number they call back, which for a released number
+      // means calling a stranger.
       const { data: settings } = await db
         .from('telephony_settings')
         .select('default_number_id, recording_enabled')
@@ -827,7 +840,8 @@ Deno.serve(async (req: Request) => {
         .from('phone_numbers')
         .select('id, e164, is_primary')
         .eq('team_id', teamId)
-        .eq('voice_enabled', true);
+        .eq('voice_enabled', true)
+        .is('released_at', null);
       const fromRow = (numbers || []).find((n) => n.id === settings?.default_number_id)
         || (numbers || []).find((n) => n.is_primary)
         || (numbers || [])[0];
