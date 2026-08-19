@@ -282,22 +282,28 @@ this reproduces locally — `cleanUrls` and `trailingSlash` exist only on Vercel
 
 ### Dashboard settings that no API can reach
 
-Three things live in dashboard UI with no MCP tool or CLI equivalent, so they
-are Tossie's to set:
+Three things live in dashboard UI with no MCP tool or CLI equivalent.
 
-1. **`SUPABASE_SERVICE_KEY`** in Vercel → the one required secret. It bypasses
-   RLS, so it should never pass through anyone else's hands. Until it is set,
+1. **`SUPABASE_SERVICE_KEY`** in Vercel — **set** (Production + Preview,
+   Aug 18 2026). The one required secret: it bypasses RLS, so it is the one
+   credential that should pass through as few hands as possible. Without it
    `api/lead.js` validates a website lead, logs it, and returns 200 — the site
-   works, the lead just is not stored. Everything else is already wired: the
-   Supabase URL and anon key are committed defaults, since the anon key is
-   public by design and `probe-live.sh` proves it inert.
-2. **Supabase → Authentication → URL Configuration.** Site URL and the redirect
-   allow-list must include the deployed origin, or the magic link will bounce
-   the operator to `localhost:3000`.
-3. **Custom SMTP** (Supabase → Authentication → Emails). The built-in sender is
-   rate-limited to a handful of messages an hour and is meant for testing; on
-   current projects it will only deliver to addresses attached to the Supabase
-   account. Point it at the same Resend account the lead alerts use.
+   works and the lead is silently gone. Everything else was removed as an env
+   var: the Supabase URL and anon key are committed defaults, since the anon
+   key is public by design and `probe-live.sh` proves it inert.
+2. **Supabase → Authentication → URL Configuration** — **set** (Aug 18 2026).
+   Site URL was still `http://localhost:3000` with no redirect URLs at all, so
+   every magic link would have bounced the operator to localhost. Now Site URL
+   `https://tossie-buys-houses.vercel.app`, redirect allow-list
+   `…/app` and `…/app/**` — the exact path the app sends plus its deep routes,
+   without opening the whole domain.
+3. **Custom SMTP** (Supabase → Authentication → Emails) — **still off.** The
+   built-in sender is rate-limited to a handful of messages an hour and only
+   delivers to addresses attached to the Supabase account, so it reaches
+   Derik's address but will not reach `info@tossiebuyshouses.com`. Enabling it
+   needs an SMTP password pasted into the dashboard. Point it at the same
+   Resend account the lead alerts use, sending from
+   `mail.tossiebuyshouses.com` per §2 — never the root domain.
 
 Also still open: Sentry is not wired.
 
