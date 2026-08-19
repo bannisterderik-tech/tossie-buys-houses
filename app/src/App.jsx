@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { supabase, isConfigured } from './supabase.js';
-import { useRoute, useLinkInterceptor, matchLeadId } from './router.js';
+import { useRoute, useLinkInterceptor, matchLeadId, matchBuyerId, matchDealId } from './router.js';
 import AuthPage from './components/AuthPage.jsx';
 import Layout from './components/Layout.jsx';
 import LeadsPage from './pages/LeadsPage.jsx';
@@ -11,7 +11,13 @@ import TodayPage from './pages/TodayPage.jsx';
 import ImportPage from './pages/ImportPage.jsx';
 import DialerPage from './pages/DialerPage.jsx';
 import MessagesPage from './pages/MessagesPage.jsx';
+import SdrPage from './pages/SdrPage.jsx';
 import PhoneSettingsPage from './pages/PhoneSettingsPage.jsx';
+import BuyersPage from './pages/BuyersPage.jsx';
+import BuyerDetail from './pages/BuyerDetail.jsx';
+import DealsPage from './pages/DealsPage.jsx';
+import DealDetail from './pages/DealDetail.jsx';
+import CampaignsPage from './pages/CampaignsPage.jsx';
 
 export default function App() {
   const [session, setSession] = useState(null);
@@ -34,6 +40,8 @@ export default function App() {
   if (!session) return <AuthPage />;
 
   const leadId = matchLeadId(path);
+  const buyerId = matchBuyerId(path);
+  const dealId = matchDealId(path);
 
   return (
     <Layout session={session}>
@@ -45,6 +53,30 @@ export default function App() {
         : path === '/today' ? <TodayPage />
         : path === '/dialer' ? <DialerPage />
         : path === '/messages' ? <MessagesPage />
+        // Routed because the webhook now dispatches to the SDR. In draft mode —
+        // the mode this ships in — every reply the SDR writes waits in this
+        // queue and reaches nobody until a human approves it, so an unrouted
+        // page is not a missing screen, it is a seller who is never answered.
+        : path === '/sdr' ? <SdrPage />
+        // The buyers list is the asset a wholesaler actually owns, and it is
+        // also the only audience Tossie's Low Volume Mixed A2P campaign can
+        // defensibly be blasted to. Unrouted it is not a missing screen, it is
+        // a dispo workflow with nowhere to record who agreed to be texted.
+        : buyerId ? <BuyerDetail id={buyerId} />
+        : path === '/buyers' ? <BuyersPage />
+        // The board card navigates to /deals/:id, so leaving these unrouted is
+        // not a missing screen — it is a board whose every card lands on "Nothing
+        // at /deals/…". The two clocks on those cards are the inspection and
+        // closing deadlines, which are the dates that cost real money when missed.
+        : dealId ? <DealDetail id={dealId} />
+        : path === '/deals' ? <DealsPage />
+        // Unrouted, this page is worse than absent. The dispo blast is the only
+        // bulk-SMS path that goes through broadcast-send, and broadcast-send is
+        // the only thing that hands a campaign to twilio-send-sms. Without the
+        // screen the audience ledger — the record of who was suppressed and why
+        // — is a table nobody can read, which is the exact evidence a carrier
+        // asks for when it reviews a Low Volume Mixed campaign.
+        : path === '/campaigns' ? <CampaignsPage />
         : path === '/import' ? <ImportPage />
         : path === '/board' ? <BoardPage />
         : path === '/settings/phone' ? <PhoneSettingsPage />

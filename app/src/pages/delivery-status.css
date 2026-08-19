@@ -1,0 +1,76 @@
+/* What became of an outbound text, on screen.
+
+   Shared by the two composers — the lead detail thread (lead-comms.css) and the
+   inbox (MessagesPage) — because there are two of them and the vocabulary they
+   render comes from one place, lib/sms-refusals.js. Two stylesheets disagreeing
+   about what a failure looks like is the same drift the shared refusal map
+   exists to prevent, one layer down: the copy that drifts is the one that
+   renders a dead text as a delivered one.
+
+   Its own file rather than more of lead-comms.css so the inbox can import it
+   without dragging in the lead panel's layout, and rather than more of
+   styles.css so the shell is never touched to change a delivery colour.
+
+   Colours are the app's existing palette: --wash/--line/--muted for the states
+   that are not a problem, and the three error reds (#a11b0f, #fdecea, #8c1a10)
+   the failed-message bubble already uses. A failure has to look like every
+   other thing that went wrong, not like a fourth shade nobody recognises. */
+
+/* ── the state chip ───────────────────────────────────────────────────────
+   Always present on an outbound message, spelled out rather than implied by a
+   tick. Three tones and no more: waiting, arrived, gone. 'queued' and 'sent'
+   share the neutral one on purpose — they are the normal first seconds of every
+   message's life, and colour there teaches the operator to ignore the colour
+   that matters. */
+.deliv {
+  display: inline-block; border-radius: 100px; padding: 0 7px;
+  font-size: 0.68rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em;
+  background: var(--wash); color: var(--muted); border: 1px solid var(--line);
+}
+.deliv.ok { background: #e6f4ea; color: #0b6b34; border-color: #b7e0c4; }
+/* Both terminal failures get the solid red. 'undelivered' used to fall through
+   to the neutral chip, which put "the carrier threw this away" on screen in the
+   same grey as "waiting" — the exact confusion this whole file exists to end. */
+.deliv.dead { background: #a11b0f; color: #fff; border-color: #a11b0f; }
+
+/* The Twilio code, beside the chip. Monospaced because it is a number to be
+   read exactly and searched for, not prose. */
+.deliv-code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.72rem; color: var(--muted);
+}
+
+/* ── the failure explanation ──────────────────────────────────────────────
+   Sits inside the bubble, under the text, so it cannot be mistaken for a note
+   about a different message. Weight and colour are the error palette's, because
+   the one thing this must never read as is metadata. */
+.delivwhy {
+  display: block; margin-top: 5px; font-size: 0.79rem; font-weight: 700; color: #a11b0f;
+}
+.delivwhy .code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 700;
+}
+/* The translated Twilio code, in normal weight under the headline: the headline
+   says the seller did not get it, this says what to do about it. */
+.delivwhy .what { display: block; margin-top: 3px; font-weight: 400; }
+
+/* 30007 and 30034 are not facts about this seller — they are facts about our
+   messaging registration, and they are hitting every text on the number. An
+   operator reading them as "this lead is unreachable" will work down a whole
+   list drawing that conclusion one seller at a time, so the label that says
+   otherwise is the loudest thing in the bubble. */
+.delivwhy .setup {
+  display: inline-block; margin-top: 5px; padding: 1px 7px; border-radius: 100px;
+  background: #a11b0f; color: #fff;
+  font-size: 0.68rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em;
+}
+
+/* ── the inbox bubble ─────────────────────────────────────────────────────
+   .bubble lives in styles.css, which this file does not touch; .dead is added
+   here so the inbox gets the same treatment the lead panel's .msg.dead already
+   had. A failed text that still renders navy-on-the-right is a text the
+   operator believes the seller has. */
+.bubble.dead .text {
+  background: #fdecea; color: #8c1a10; border: 1.5px solid #a11b0f;
+  border-bottom-right-radius: 4px;
+}

@@ -1,12 +1,16 @@
 // supabase/functions/twilio-webhook/index.ts
 // ============================================================================
-// Inbound SMS from Twilio.
+// Inbound SMS from Twilio, and delivery receipts for what we sent.
 // ============================================================================
 // Twilio POSTs application/x-www-form-urlencoded with From, To, Body,
 // MessageSid, AccountSid, NumSegments, NumMedia. Configure it at
 // Twilio Console -> Phone Number -> Messaging -> "A message comes in":
 //
 //   {SUPABASE_URL}/functions/v1/twilio-webhook
+//
+// The SAME URL is what twilio-send-sms hands Twilio as StatusCallback, so this
+// function answers two different webhooks that share one shape. See the
+// discriminator note below — that is the load-bearing part.
 //
 // DEPLOYMENT: this function must be deployed with JWT verification OFF
 // (`supabase functions deploy twilio-webhook --no-verify-jwt`). Twilio cannot
@@ -22,8 +26,17 @@
 // AES-GCM encrypted per-team BYO auth tokens (Tossie is one business paying
 // one Twilio bill), the FollowUpBoss note mirroring (there is no outside CRM —
 // the lead detail panel is the CRM) and the text-for-info keyword router (a
-// listing-agent feature). The AI SDR dispatch is left out until Phase 4 builds
-// the SDR; the hook for it is marked below.
+// listing-agent feature).
+//
+// THE SDR HOOK. An ordinary reply from a matched lead is handed to ai-sdr's
+// continue_conversation after the message is stored. It is a notification and
+// nothing more: this file decides only that a seller said something real, and
+// ai-sdr decides whether anyone is allowed to answer — the team switch, the
+// per-lead switch, draft-vs-auto, the grace period and the conversation lock
+// all live over there, at the one choke point every SDR path funnels through.
+// Re-deciding any of that here would be a second copy of a rule about texting
+// a homeowner, and the copy that drifts is the one that answers a STOP.
+// See notifySdr() for why it cannot fail this request.
 //
 // Two places this is deliberately stricter than the original:
 //   - No unsigned path at all. reoperative had a TWILIO_WEBHOOK_UNSAFE dev
@@ -33,16 +46,53 @@
 //     seller's reply. Retrying is only safe because of the idempotency claim
 //     below, so the two changes are one change.
 //
-// ORDER OF WRITES, and why it is the way it is. Suppression (STOP/START) is
-// written BEFORE the idempotency claim; the message row, the timeline and the
-// auto-reply record come after. The claim exists to stop a Twilio retry from
-// doubling the thread, which means everything behind it is skipped on a retry —
-// so anything that must survive a failure has to happen in front of it. Put the
-// opt-out behind the claim and a failed suppression write becomes permanent: the
-// 500 makes Twilio retry, the retry collides on the claim, returns the "you are
-// unsubscribed" confirmation, and the opt-out row never exists. Both suppression
-// writes are idempotent (ON CONFLICT DO NOTHING; a DELETE that matches nothing),
-// so re-running them on every delivery is free.
+// ORDER OF WRITES, and why it is the way it is.
+//
+//   1. Signature check. First, always, and it fails closed — everything below
+//      is a write on the service role, so an unsigned request is a stranger
+//      with a pen. AccountSid is checked immediately after it.
+//   2. DELIVERY RECEIPT BRANCH. Sits here, ahead of everything, because it is
+//      the only branch that must be unable to reach the inbound path: a status
+//      callback carries our own number as From and the seller as To, so if it
+//      ever fell through it would be filed as a message the seller never sent.
+//      It returns before From/To are resolved, before classify() is called and
+//      before a single suppression write — a receipt can therefore never
+//      trigger STOP handling, no matter what it carries.
+//   3. Suppression (STOP/START), BEFORE the idempotency claim.
+//   4. The idempotency claim (the sms_messages insert; twilio_sid is UNIQUE).
+//   5. The timeline, the SDR notification and the auto-reply record.
+//
+// Steps 3 and 4 are in that order and not the other one. The claim exists to
+// stop a Twilio retry from doubling the thread, which means everything behind it
+// is skipped on a retry — so anything that must survive a failure has to happen
+// in front of it. Put the opt-out behind the claim and a failed suppression
+// write becomes permanent: the 500 makes Twilio retry, the retry collides on the
+// claim, returns the "you are unsubscribed" confirmation, and the opt-out row
+// never exists. Both suppression writes are idempotent (ON CONFLICT DO NOTHING;
+// a DELETE that matches nothing), so re-running them on every delivery is free.
+//
+// THE DISCRIMINATOR. A delivery receipt is recognised by TWO facts that must
+// both hold: MessageStatus is present and is not 'received', AND there is no
+// Body key at all. Twilio's inbound webhook carries Body on every message —
+// empty string for a photo-only MMS, but present — and reports its state in
+// SmsStatus, never MessageStatus. A status callback is the mirror image: it
+// carries MessageStatus (and SmsStatus alongside it) and no Body whatsoever.
+//
+// Requiring both is what makes it unable to misfire in the direction that
+// costs something. A single signal could break either way if Twilio ever
+// changed the payload; the conjunction can only fail one way. If Twilio starts
+// sending MessageStatus on inbound messages, Body is still there, so the text
+// is still handled as a text. If Twilio starts sending Body on status
+// callbacks, the receipt falls through to the inbound path — where it collides
+// on the UNIQUE twilio_sid of the outbound row it is a receipt FOR, is logged
+// as a duplicate, and answers 200. That degrades to today's bug (statuses stop
+// updating, visible on every thread) rather than to a fabricated inbound
+// message or, far worse, a dropped STOP.
+//
+// 'received' is excluded explicitly rather than left to the Body test, because
+// 'received' is the one MessageStatus value that describes an inbound message.
+// If it ever shows up on the inbound webhook, that alone must not be enough to
+// make this function stop storing seller replies.
 // ============================================================================
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
@@ -74,6 +124,53 @@ const HELP_WORDS = new Set(['HELP', 'INFO']);
 const START_WORDS = new Set(['START', 'UNSTOP']);
 
 type Keyword = 'stop' | 'help' | 'start' | null;
+
+/**
+ * How far along a message is, as a number that only ever goes up.
+ *
+ * twilio-voice keeps a flat TERMINAL list for calls and refuses to write a
+ * non-terminal status over a terminal one; this is that rule for messages, plus
+ * the rung below it. Rank 2 IS the terminal set — delivered, undelivered and
+ * failed are the end of a message's story, and a 'sent' that took a slow detour
+ * through a carrier queue must not reopen one. Ranking 'queued' under 'sent' as
+ * well costs nothing and closes the other out-of-order case: Twilio's 'sending'
+ * maps to 'queued' (see mapTwilioStatus), so without the lower rung a late
+ * 'sending' would report a message that is already gone as still waiting.
+ *
+ * Out-of-order delivery is not an edge case here. Twilio fires a callback per
+ * transition and retries any it does not get a 2xx for, so receipts routinely
+ * arrive late, twice, and in the wrong order.
+ */
+const STATUS_RANK: Record<string, number> = {
+  queued: 0,
+  sent: 1,
+  delivered: 2,
+  undelivered: 2,
+  failed: 2,
+};
+const TERMINAL_RANK = 2;
+
+/**
+ * Twilio's message statuses are a superset of what sms_messages.status allows —
+ * 'accepted', 'scheduled' and 'sending' are not in the CHECK constraint.
+ *
+ * The twin of this lives in twilio-send-sms, for the same reason and with the
+ * same mapping: an unmapped value fails the constraint, and a rejected write
+ * here means the receipt is lost and the operator keeps reading 'queued'.
+ * Deliberately not hoisted into _shared/ — it is five lines and a comment, and
+ * a shared module that two functions each import for one switch statement is
+ * more coupling than the duplication costs. Grep both together before editing
+ * either.
+ */
+function mapTwilioStatus(s: unknown): string {
+  switch (String(s || '').toLowerCase()) {
+    case 'delivered': return 'delivered';
+    case 'sent': return 'sent';
+    case 'failed': return 'failed';
+    case 'undelivered': return 'undelivered';
+    default: return 'queued'; // accepted / scheduled / sending / queued / unknown
+  }
+}
 
 /** Classify the whole message, or null if it is an ordinary reply. */
 function classify(body: string): Keyword {
@@ -149,6 +246,18 @@ Deno.serve(async (req: Request) => {
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     { auth: { autoRefreshToken: false, persistSession: false } },
   );
+
+  // ── Delivery receipt, or a message from a seller? ─────────────────────────
+  // Both signals, and the whole reasoning behind requiring both, are in the
+  // DISCRIMINATOR note at the top of the file. This has to stay above
+  // everything else in the handler: below this line the request is treated as
+  // something a homeowner typed, which for a status callback would mean filing
+  // our own outbound number as an inbound sender and running classify() over a
+  // body that does not exist.
+  const messageStatus = (params['MessageStatus'] || '').trim().toLowerCase();
+  if (messageStatus && messageStatus !== 'received' && !('Body' in params)) {
+    return await applyDeliveryReceipt(admin, params);
+  }
 
   const from = normalizeE164(params['From']);
   const to = normalizeE164(params['To']);
@@ -382,13 +491,40 @@ Deno.serve(async (req: Request) => {
       );
     }
 
+    // ── The AI SDR ─────────────────────────────────────────────────────────
+    // Three conditions, and each one is a message the SDR must not see:
+    //
+    //   keyword === null   a STOP, START or HELP is a compliance instruction,
+    //                      not a conversation. Answering a STOP with a
+    //                      generated question is the single worst thing this
+    //                      system could do, so the SDR is never told about one.
+    //                      This branch is downstream of the suppression writes
+    //                      above, so by the time anything could be dispatched
+    //                      the opt-out row already exists — but the keyword
+    //                      check is what actually stops it, not the ordering.
+    //   leadId             an unmatched number has no lead to qualify and no
+    //                      consent basis on file; it waits for a human.
+    //   body.trim()        an MMS of the roof with no caption. ai-sdr requires
+    //                      inbound_message and would refuse it, and there is
+    //                      nothing in a photo for a text model to answer.
+    //
+    // Placed after the idempotency claim on purpose: a Twilio redelivery
+    // returns from the duplicate branch above and never reaches here, so one
+    // inbound text produces at most one SDR turn. The cost is that a crash
+    // between the claim and this line loses the notification, since the retry
+    // is then a duplicate — a missed reply the operator can see in the thread,
+    // rather than a seller texted twice by a machine.
+    if (keyword === null && leadId && body.trim()) {
+      notifySdr({ leadId, body, messageSid });
+    }
+
     // ── Answer ─────────────────────────────────────────────────────────────
     // The keyword confirmation, or an empty <Response/> for an ordinary reply.
-    // Phase 4 hooks the AI SDR in on that last case: lead matched, no keyword,
-    // dispatch continue_conversation. Until the SDR exists there is no
-    // auto-reply, which is the right thing to ship — an operator reading the
-    // thread beats a bot guessing at it, and this is a homeowner, not a support
-    // queue.
+    // The SDR's reply, when there is one, does NOT come back through this
+    // TwiML: it goes out through twilio-send-sms minutes later at the earliest,
+    // because a draft waits for a human and even an auto send has to clear the
+    // opt-out list, the kill switches and the calling window first. Twilio is
+    // answered now, in milliseconds, either way.
     return await respond(admin, ctx, keyword);
   } catch (err) {
     // 500, not 200: Twilio retries. The retry is safe because suppression is
@@ -398,6 +534,111 @@ Deno.serve(async (req: Request) => {
     return new Response('Internal error', { status: 500 });
   }
 });
+
+/**
+ * Twilio telling us what became of a message we sent.
+ *
+ * Without this, every outbound row sits at 'queued' for the rest of time and
+ * the operator cannot tell a text the seller read from one a carrier silently
+ * dropped. For a wholesaler that is the difference between following up and
+ * writing the lead off.
+ *
+ * Correlated on twilio_sid, which is UNIQUE, so the match is exact. Three
+ * things narrow the write, and each one is load-bearing:
+ *
+ *   direction = 'outbound'
+ *     A receipt can only ever be about a message we sent. Twilio's inbound
+ *     webhook and a Messaging Service's account-wide status callback both carry
+ *     a MessageSid, and an inbound row's SID is the inbound message's own — so
+ *     without this filter a stray callback could overwrite a seller's stored
+ *     'received' with 'delivered' and quietly rewrite what the thread says
+ *     happened. The auto-reply rows are safe either way: they are keyed
+ *     'reply:<sid>' and can never match a real SID.
+ *
+ *   the rank filter
+ *     `status IN (…)` on the way in, listing only the states this receipt is
+ *     allowed to advance FROM. A terminal receipt has no filter, because
+ *     nothing outranks it. This is one atomic UPDATE rather than a read, a
+ *     decision and a write — two receipts arriving at once would both pass a
+ *     read-then-write check, and the loser would be the one that stuck.
+ *
+ *   delivered_at, only on 'delivered'
+ *     It is a fact about one transition, not a general timestamp, and the
+ *     UPDATE that carries it is the only one that may claim it.
+ *
+ * error_code is written when Twilio sends one and never cleared, because the
+ * code IS the explanation for a terminal status and a later redelivery that
+ * omitted it would erase the only thing on the row that tells the operator
+ * whether to retry.
+ *
+ * A receipt for a SID we hold no row for answers 200. Twilio retries any
+ * non-2xx until it gives up, so erroring on an unknown SID would buy an
+ * indefinite retry loop for a message that is never going to appear —
+ * a text sent from the Twilio console, or one whose row predates this handler.
+ */
+async function applyDeliveryReceipt(
+  admin: SupabaseAdmin,
+  params: Record<string, string>,
+): Promise<Response> {
+  const sid = params['MessageSid'] || params['SmsSid'] || '';
+  const status = mapTwilioStatus(params['MessageStatus']);
+  const errorCode = (params['ErrorCode'] || '').trim();
+
+  if (!sid) {
+    // 200, not 500: a retry cannot add a field Twilio did not send.
+    console.error(`[twilio-webhook] status callback with no MessageSid (status=${status}) — nothing to correlate`);
+    return twiml('');
+  }
+
+  const patch: Record<string, unknown> = { status };
+  if (errorCode) patch.error_code = errorCode;
+  if (status === 'delivered') patch.delivered_at = new Date().toISOString();
+
+  let update = admin
+    .from('sms_messages')
+    .update(patch)
+    .eq('twilio_sid', sid)
+    .eq('direction', 'outbound');
+
+  const rank = STATUS_RANK[status];
+  if (rank < TERMINAL_RANK) {
+    update = update.in(
+      'status',
+      Object.keys(STATUS_RANK).filter((s) => STATUS_RANK[s] <= rank),
+    );
+  }
+
+  const { data, error } = await update.select('id');
+  if (error) {
+    // 500 so Twilio redelivers. Safe precisely because of the rank filter: the
+    // retry either applies the same transition or is refused by it.
+    console.error(`[twilio-webhook] delivery receipt not applied (sid=${sid}, status=${status}):`, error.message);
+    return new Response('Internal error', { status: 500 });
+  }
+
+  if (!data || data.length === 0) {
+    // Zero rows means one of two very different things, and an operator reading
+    // these logs needs to know which — "we have never heard of this message" is
+    // a configuration problem, "this arrived out of order" is the guard working
+    // exactly as intended. One extra read on a path that is already rare.
+    const { data: existing } = await admin
+      .from('sms_messages')
+      .select('status, direction')
+      .eq('twilio_sid', sid)
+      .maybeSingle();
+    if (!existing) {
+      console.warn(`[twilio-webhook] delivery receipt for unknown ${sid} (status=${status}) — no row to update`);
+    } else {
+      console.log(
+        `[twilio-webhook] ignored out-of-order receipt for ${sid}: ${status} does not outrank stored ${existing.status}`,
+      );
+    }
+    return twiml('');
+  }
+
+  console.log(`[twilio-webhook] ${sid} -> ${status}${errorCode ? ` (Twilio ${errorCode})` : ''}`);
+  return twiml('');
+}
 
 /** Everything respond() needs to record the auto-reply it is about to send. */
 type ReplyContext = {
@@ -481,6 +722,80 @@ async function respond(admin: SupabaseAdmin, ctx: ReplyContext, keyword: Keyword
     console.error(`[twilio-webhook] auto-reply sent but not recorded (sid=${ctx.inboundSid}):`, error.message);
   }
   return twiml(text);
+}
+
+/**
+ * Tell ai-sdr the seller replied. Fire-and-forget, and deliberately so.
+ *
+ * Twilio retries any non-2xx and treats a slow response as a failure, so the
+ * SDR turn — a model call plus a database round trip, seconds at best — must be
+ * unable to delay or fail this request. Two things make that true:
+ *
+ *   1. Nothing is awaited. The promise is handed to EdgeRuntime.waitUntil(),
+ *      which keeps the isolate alive after the response is returned instead of
+ *      tearing the work down mid-flight. Without it a detached promise is a
+ *      coin flip: the response returns, the isolate is reclaimed, and the SDR
+ *      never runs — silently, and only in production, where the seller is.
+ *   2. Every failure is swallowed into a log line. A rejected fetch here would
+ *      surface as an unhandled rejection; a thrown error would land on the
+ *      catch in the handler and answer 500, which is a retry storm caused by
+ *      the model being slow. The seller's message is already stored and the
+ *      opt-out state is already written, so there is nothing left in this
+ *      request worth retrying for.
+ *
+ * The abort is about this isolate, not about the SDR: ai-sdr is a separate
+ * invocation and keeps working on its own turn regardless. Ninety seconds is
+ * past the point where waiting tells us anything.
+ *
+ * Service key, because ai-sdr runs with verify_jwt off and authenticates the
+ * caller itself — the service key is what marks this as an internal caller
+ * allowed to act on a lead it did not have to prove it can see.
+ */
+function notifySdr(opts: { leadId: string; body: string; messageSid: string }): void {
+  const url = Deno.env.get('SUPABASE_URL');
+  const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  if (!url || !key) {
+    console.error('[twilio-webhook] cannot reach ai-sdr: SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY is not set');
+    return;
+  }
+
+  const task = fetch(`${url}/functions/v1/ai-sdr`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', Authorization: `Bearer ${key}` },
+    body: JSON.stringify({
+      action: 'continue_conversation',
+      lead_id: opts.leadId,
+      // Raw, as the seller typed it. ai-sdr sanitises it and wraps it in
+      // <seller_message> before the model sees it; cleaning it here would mean
+      // two sanitisers with two opinions, and the transcript it stores would no
+      // longer match sms_messages.
+      inbound_message: opts.body,
+      // No team_id: continue_conversation resolves the team from the lead, and
+      // a team_id in the payload would read as if it were part of the check.
+    }),
+    signal: AbortSignal.timeout(90_000),
+  })
+    .then(async (res) => {
+      // Logged, not acted on. Every interesting outcome — the SDR is off, the
+      // lead has no conversation, a human claimed it — comes back as 200 with a
+      // reason, and all of them mean the same thing here: nothing more to do.
+      const detail = await res.text().catch(() => '');
+      if (!res.ok) {
+        console.error(`[twilio-webhook] ai-sdr refused (sid=${opts.messageSid}, ${res.status}): ${detail.slice(0, 300)}`);
+      } else {
+        console.log(`[twilio-webhook] ai-sdr notified (sid=${opts.messageSid}): ${detail.slice(0, 200)}`);
+      }
+    })
+    .catch((err: unknown) => {
+      console.error(`[twilio-webhook] ai-sdr not reached (sid=${opts.messageSid}):`, (err as Error)?.message || err);
+    });
+
+  // Feature-detected rather than assumed: outside the Supabase edge runtime —
+  // a local `deno run`, a test harness — the global is absent, and the promise
+  // above is already running either way.
+  // deno-lint-ignore no-explicit-any
+  const runtime = (globalThis as any).EdgeRuntime;
+  if (typeof runtime?.waitUntil === 'function') runtime.waitUntil(task);
 }
 
 /**

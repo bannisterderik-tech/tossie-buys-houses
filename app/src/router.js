@@ -57,8 +57,26 @@ export function useLinkInterceptor() {
   }, [onClick]);
 }
 
-/** `/leads/:id` -> id, for the one dynamic route the app has today. */
+/** `/leads/:id` -> id. */
 export function matchLeadId(path) {
   const m = path.match(/^\/leads\/([0-9a-f-]{36})$/i);
+  return m ? m[1] : null;
+}
+
+/**
+ * `/buyers/:id` -> id.
+ *
+ * A UUID and nothing else, same as matchLeadId, so a literal path segment that
+ * someone adds later — /buyers/new, /buyers/import — falls through to its own
+ * route instead of being read as a buyer id and rendering "Buyer not found".
+ */
+export function matchBuyerId(path) {
+  const m = path.match(/^\/buyers\/([0-9a-f-]{36})$/i);
+  return m ? m[1] : null;
+}
+
+/** `/deals/:id` -> id. Same UUID-only rule as the two above. */
+export function matchDealId(path) {
+  const m = path.match(/^\/deals\/([0-9a-f-]{36})$/i);
   return m ? m[1] : null;
 }

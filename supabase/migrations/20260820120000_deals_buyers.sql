@@ -1120,6 +1120,14 @@ GRANT SELECT, INSERT ON public.deal_events TO authenticated;
 -- appear is a buyer who gets called back an hour late, by which time the second
 -- buyer on the list has said yes. Guarded exactly like 20260817120200: ALTER
 -- PUBLICATION ADD errors on a duplicate and would make a re-run fail.
+--
+-- `buyers` is here because the buyers list subscribes to it, and an unpublished
+-- table makes that subscription succeed and then never fire — a dead feed that
+-- looks alive is worse than no feed, because the page stops being reloaded on
+-- the strength of it. Note what it still cannot carry: a STOP is written to
+-- telephony_opt_outs, not to buyers, so buyer_skip_reason changes with no event
+-- on this table. That table is deliberately NOT published; the opt-out rail is
+-- twilio-send-sms at send time, not a green badge on a list screen.
 DO $do$
 DECLARE t text;
 BEGIN
@@ -1127,7 +1135,7 @@ BEGIN
     RETURN;
   END IF;
 
-  FOREACH t IN ARRAY ARRAY['deals', 'buyer_deal_interest']
+  FOREACH t IN ARRAY ARRAY['deals', 'buyer_deal_interest', 'buyers']
   LOOP
     IF NOT EXISTS (
       SELECT 1 FROM pg_publication_tables

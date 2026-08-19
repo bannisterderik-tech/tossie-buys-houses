@@ -68,6 +68,151 @@ export const REFUSALS = {
 /** Twilio's hard ceiling on a single message body. */
 export const MAX_BODY = 1600;
 
+/* ── what became of a message we sent ─────────────────────────────────────────
+
+   The refusals above answer "the send was refused". These answer the question
+   after it: the send was accepted, Twilio took the message — and then what.
+
+   Until twilio-webhook grew a MessageStatus branch there was no answer at all.
+   Every outbound row sat at 'queued' forever, which the two composers rendered
+   verbatim, so a delivered text and one the carrier silently dropped looked
+   identical on screen. For a wholesaler that is the difference between
+   following up on a seller and writing them off.
+
+   Same contract rule as REFUSALS: these keys are sms_messages.status values,
+   spelled the way the CHECK constraint in 20260818120000_telephony.sql spells
+   them. An unknown status falls through to the raw string rather than
+   disappearing. */
+
+/**
+ * One entry per status the schema allows on an outbound row.
+ *
+ * `tone` is what the CSS keys off, and there are only three of them on purpose.
+ * 'wait' is not styled as a problem — it is the normal first second of every
+ * message's life, and colouring it would train the operator to ignore the
+ * colour that matters.
+ */
+export const DELIVERY = {
+  queued: {
+    label: 'Queued',
+    tone: 'wait',
+    // No headline: this is not a failure, and a bubble that explains itself
+    // while nothing is wrong is a bubble nobody reads when something is.
+    headline: null,
+  },
+  sent: {
+    label: 'Sent',
+    tone: 'wait',
+    // Deliberately not reassuring. 'sent' means the carrier accepted it, not
+    // that a handset ever showed it — the receipt that says so is 'delivered',
+    // and conflating the two is how a dropped text gets treated as read.
+    headline: null,
+  },
+  delivered: {
+    label: 'Delivered',
+    tone: 'ok',
+    headline: null,
+  },
+  undelivered: {
+    label: 'Undelivered',
+    tone: 'dead',
+    headline: 'Undelivered — it left us and the carrier never handed it over. The seller does not have this message.',
+  },
+  failed: {
+    label: 'Failed',
+    tone: 'dead',
+    headline: 'Failed — it never left. The seller does not have this message.',
+  },
+};
+
+/**
+ * Twilio's error codes, in words an operator can act on.
+ *
+ * `setup` is the field that matters. 30003/30005/30006 are facts about the
+ * seller's handset: this person cannot be reached by text, so call them and
+ * move on. 30007 and 30034 are facts about US — our messaging registration or
+ * our sending reputation — and they do not stop at one seller. Every text on
+ * that number is failing the same way, so an operator who reads them as "this
+ * lead is unreachable" will work down a whole list drawing that conclusion one
+ * seller at a time. Saying which kind of problem it is, on the bubble, is the
+ * only thing that stops that.
+ *
+ * Keys are strings because sms_messages.error_code is text — twilio-send-sms
+ * writes non-numeric codes into it too ('network', 'twilio_not_configured').
+ */
+export const TWILIO_ERRORS = {
+  30003: {
+    setup: false,
+    text: 'The handset was unreachable — switched off, out of coverage, or the number is no longer in service. Worth one retry later; if it repeats, call instead.',
+  },
+  30005: {
+    setup: false,
+    text: 'The carrier does not recognise this number. It is disconnected or was never a mobile. Retrying will not change that — call the seller or find a better number.',
+  },
+  30006: {
+    setup: false,
+    text: 'It is a landline, or a carrier that cannot take texts at all. This seller will never receive an SMS at this number. Call them.',
+  },
+  30007: {
+    setup: true,
+    text: 'The carrier filtered it as spam. This is our messaging setup, not this seller — the same block is hitting every text from this number. Stop the queue and fix the registration or the content before sending more.',
+  },
+  30034: {
+    setup: true,
+    text: 'The sending number is not registered to an A2P 10DLC campaign. Nothing sent from it will be delivered until registration clears. This is our setup, not this seller.',
+  },
+  network: {
+    setup: true,
+    text: 'Twilio never answered the send. Whether the text went out is genuinely unknown — read the thread before retyping it.',
+  },
+  twilio_not_configured: {
+    setup: true,
+    text: 'Twilio credentials are not set on the send function. Nothing was sent, and nothing will send until that deploy step is done.',
+  },
+  21610: {
+    setup: false,
+    text: 'Twilio has this number on its own opt-out list: they replied STOP at some point. It is now on ours too, and only a START from them clears it.',
+  },
+};
+
+/**
+ * The delivery state of one message row, ready to render.
+ *
+ * Returns null for inbound — an inbound message has no delivery state worth
+ * showing; it is here, which is the whole story.
+ *
+ * `failed` is the flag the composers style on, and it is deliberately true for
+ * BOTH failed and undelivered. Those are two different mechanisms and the
+ * headline says which, but they mean the identical thing to whoever is working
+ * the lead: the seller did not get it.
+ */
+export function deliveryState(m) {
+  if (!m || m.direction === 'inbound') return null;
+
+  const status = m.status || 'queued';
+  const known = DELIVERY[status] || null;
+  const code = m.error_code ? String(m.error_code) : null;
+  const err = code ? TWILIO_ERRORS[code] || null : null;
+
+  return {
+    status,
+    // An unmapped status still shows, in the database's own word. A status
+    // added server-side is visible here the day it ships.
+    label: known?.label || status,
+    tone: known?.tone || 'wait',
+    failed: status === 'failed' || status === 'undelivered',
+    headline: known?.headline || null,
+    code,
+    // The plain-English translation, when there is one. An untranslated code is
+    // never swallowed — the bare number goes on screen, because a code an
+    // operator can search for beats no code at all.
+    codeText: err?.text || null,
+    // True only for the codes that mean "your messaging setup is wrong" rather
+    // than "this seller is unreachable".
+    setupProblem: !!err?.setup,
+  };
+}
+
 /**
  * One refusal payload, one on-screen sentence.
  *

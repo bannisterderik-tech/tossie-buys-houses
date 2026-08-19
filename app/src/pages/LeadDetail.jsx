@@ -3,14 +3,16 @@ import { supabase } from '../supabase.js';
 import { navigate } from '../router.js';
 import InlineField from '../components/InlineField.jsx';
 import DispositionBar from '../components/DispositionBar.jsx';
+import { DeliveryChip, DeliveryFailure } from '../components/DeliveryState.jsx';
 import { callingWindow } from '../lib/calling-window.js';
-import { MAX_BODY, explainRefusal, refusalFrom } from '../lib/sms-refusals.js';
+import { MAX_BODY, deliveryState, explainRefusal, refusalFrom } from '../lib/sms-refusals.js';
 import { TEAM_ID } from '../lib/team.js';
 import {
   STATUSES, TEMPERATURES, OCCUPANCY,
   titleize, formatPhone, fullAddress, fullDate, timeAgo,
 } from '../lib/format.js';
 import './lead-comms.css';
+import './delivery-status.css';
 
 const money = (v) => `$${Number(v).toLocaleString()}`;
 
@@ -840,28 +842,32 @@ function MessageThread({ leadId, to, messages, cannotSend, sender, onSent }) {
  * entirely. That is the whole point of this component: a text that failed but
  * renders as navy on the right is a text the operator believes the seller has,
  * so they stop chasing and the lead goes quiet for a reason nobody ever finds.
- * The Twilio error code goes on screen with it, because that code is the
- * difference between "resend it" and "the carrier will never take this".
+ * The Twilio error code goes on screen with it, translated, because that code
+ * is the difference between "resend it", "call them instead" and "every text
+ * from this number is being blocked".
+ *
+ * The words come from deliveryState() rather than from here, because the inbox
+ * renders the same states from the same rows and two vocabularies is one that
+ * drifts.
  */
 function Message({ m }) {
-  const failed = m.status === 'failed' || m.status === 'undelivered';
   const inbound = m.direction === 'inbound';
+  const d = deliveryState(m);
+  const failed = !!d?.failed;
 
   return (
     <div className={`msg ${inbound ? 'in' : 'out'}${failed ? ' dead' : ''}`}>
       <div className="text">
         {m.body}
-        {failed && (
-          <span className="why">
-            {m.status === 'failed' ? 'Failed — never sent' : 'Undelivered — the carrier rejected it'}
-            {m.error_code ? ` · Twilio ${m.error_code}` : ''}
-          </span>
-        )}
+        <DeliveryFailure message={m} />
       </div>
       <div className="meta">
         {fullDate(m.sent_at || m.created_at)}
-        {!inbound && <> · <span className={`deliv ${m.status}`}>{m.status}</span></>}
-        {!failed && m.error_code ? ` · Twilio ${m.error_code}` : ''}
+        {d && <> · <DeliveryChip message={m} /></>}
+        {/* On a failure the code is already spelled out inside the bubble;
+            repeating it in the metadata line is noise. On anything else — a
+            'sent' that carried a code — this is the only place it can appear. */}
+        {!failed && d?.code ? <> · <span className="deliv-code">Twilio {d.code}</span></> : null}
       </div>
     </div>
   );

@@ -59,20 +59,11 @@
   background: #fdecea; color: #8c1a10; border: 1.5px solid #a11b0f;
   border-bottom-right-radius: 4px;
 }
-.msg.dead .why {
-  display: block; margin-top: 4px; font-size: 0.79rem; font-weight: 700; color: #a11b0f;
-}
 
-/* The delivery state, always spelled out on outbound. 'queued' is not styled as
-   a problem — it is the normal first second of every message's life, and colour
-   there would train the operator to ignore the colour that matters. */
-.deliv {
-  display: inline-block; border-radius: 100px; padding: 0 7px;
-  font-size: 0.68rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em;
-  background: var(--wash); color: var(--muted); border: 1px solid var(--line);
-}
-.deliv.delivered { background: #e6f4ea; color: #0b6b34; border-color: #b7e0c4; }
-.deliv.failed { background: #a11b0f; color: #fff; border-color: #a11b0f; }
+/* The delivery chip and the failure explanation moved to delivery-status.css
+   when the inbox needed the same vocabulary. They keyed off the raw status
+   string here, which meant 'undelivered' — the carrier threw it away — rendered
+   in the same grey as 'waiting'. Both pages now import that file. */
 
 .msgcomposer { border-top: 1px solid var(--line); padding: 13px 17px; margin-top: auto; }
 .msgcomposer .err { margin-bottom: 11px; }

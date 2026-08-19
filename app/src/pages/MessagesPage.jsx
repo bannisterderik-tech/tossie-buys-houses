@@ -2,7 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '../supabase.js';
 import { TEAM_ID } from '../lib/team.js';
 import { formatPhone, timeAgo, fullDate } from '../lib/format.js';
-import { MAX_BODY, explainRefusal, refusalFrom } from '../lib/sms-refusals.js';
+import { MAX_BODY, deliveryState, explainRefusal, refusalFrom } from '../lib/sms-refusals.js';
+import { DeliveryChip, DeliveryFailure } from '../components/DeliveryState.jsx';
+import './delivery-status.css';
 
 /**
  * Two-way SMS inbox.
@@ -371,18 +373,38 @@ export default function MessagesPage() {
               </h2>
 
               <div className="bubbles" ref={scroller}>
-                {[...active.messages].reverse().map((m) => (
-                  <div key={m.id} className={`bubble ${m.direction === 'inbound' ? 'in' : 'out'}`}>
-                    <div className="text">{m.body}</div>
-                    <div className="meta">
-                      {fullDate(m.sent_at || m.created_at)}
-                      {m.direction === 'outbound' && ` · ${m.status}`}
-                      {/* The error code is the difference between "resend it" and
-                          "the carrier will never take this". Never hide it. */}
-                      {m.error_code && ` · Twilio ${m.error_code}`}
+                {/* A failed or undelivered text stops looking like a sent one,
+                    exactly as it does on the lead panel. This page used to
+                    print the raw status word and nothing else, so
+                    'undelivered' — the carrier threw it away and the seller
+                    has nothing — read as calmly as 'sent'. The operator works
+                    the inbox top to bottom; a dead message that looks alive
+                    here is a follow-up that never happens. */}
+                {[...active.messages].reverse().map((m) => {
+                  const d = deliveryState(m);
+                  return (
+                    <div
+                      key={m.id}
+                      className={`bubble ${m.direction === 'inbound' ? 'in' : 'out'}${d?.failed ? ' dead' : ''}`}
+                    >
+                      <div className="text">
+                        {m.body}
+                        <DeliveryFailure message={m} />
+                      </div>
+                      <div className="meta">
+                        {fullDate(m.sent_at || m.created_at)}
+                        {d && <> · <DeliveryChip message={m} /></>}
+                        {/* On a failure the code is already inside the bubble
+                            with what to do about it. Everywhere else this is
+                            the only place it can appear, and a code the
+                            operator can search for beats no code at all. */}
+                        {!d?.failed && d?.code
+                          ? <> · <span className="deliv-code">Twilio {d.code}</span></>
+                          : null}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
 
               <form className="composer" onSubmit={send}>

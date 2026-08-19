@@ -520,8 +520,12 @@ p.fine { margin: 8px 0 0; }
 .btn.big { padding: 14px 24px; font-size: 1.02rem; border-radius: 10px; }
 .btn.big:hover { text-decoration: none; }
 /* Outside the calling window it reads as a sign, not as a button that someone
-   might still get away with clicking. */
-.btn.big.stopped, .btn.big.stopped:hover { background: #f1f2f4; color: #7c8798; cursor: not-allowed; }
+   might still get away with clicking. Not scoped to .big: the buyer page blocks
+   the same call at toolbar size, and a blocked control that still looks live on
+   one of the two pages is worse than no styling at all. */
+.btn.stopped, .btn.stopped:hover {
+  background: #f1f2f4; color: #7c8798; cursor: not-allowed; border-color: var(--line);
+}
 
 .notice {
   background: #fef4e0; border: 1px solid #f5dfa8; color: #6d4c00;
@@ -539,6 +543,63 @@ p.fine { margin: 8px 0 0; }
 }
 .oncall-facts .v { display: block; font-size: 0.94rem; margin-top: 2px; }
 .oncall-why { margin: 0; font-size: 0.9rem; color: var(--body); }
+
+/* ── AI SDR ───────────────────────────────────────────────────────────────
+   The queue is the page. Each draft is a full-width block with a rule under it
+   rather than a card in a grid: they are read top to bottom, one at a time, and
+   a grid invites skimming past the seller's message to the buttons. */
+.sdr-modepick { margin-top: 15px; padding-top: 14px; border-top: 1px solid var(--line); }
+.sdr-modepick label { display: block; font-size: 0.8rem; font-weight: 700; color: var(--ink); }
+.sdr-modepick select {
+  display: block; margin-top: 5px; padding: 8px 11px; border: 1.5px solid var(--line);
+  border-radius: 8px; font: inherit; font-size: 0.9rem; color: var(--ink); background: #fff;
+  min-width: 300px; max-width: 100%;
+}
+.sdr-modepick select:focus { outline: 0; border-color: var(--navy); box-shadow: 0 0 0 3px rgba(26,68,133,0.13); }
+
+/* Set apart from the switches above it because it is not the same kind of
+   thing: those are settings, this is an authorisation, and it is the only
+   control here a member will find they cannot use. */
+.sdr-owner {
+  margin-top: 15px; padding: 13px 15px; border-radius: 10px;
+  border: 1.5px solid var(--line); background: var(--wash);
+}
+.sdr-owner.on { border-color: #f5c4bd; background: #fdecea; }
+.sdr-owner > strong { display: block; font-size: 0.93rem; }
+.sdr-owner.on > strong { color: #8c1a10; }
+.sdr-owner p.fine { margin: 6px 0 12px; }
+.sdr-owner .confirm { margin-top: 0; }
+
+/* The queue rows sit directly in the .card with no .body wrapper, so a banner
+   dropped among them has no inset of its own. Matched to .sdr-draft's padding
+   so the note lines up with the drafts it is counting. */
+.sdr-queuenote { margin: 15px 17px; }
+
+.sdr-draft { padding: 17px; border-bottom: 1px solid var(--line); }
+.sdr-draft:last-child { border-bottom: 0; }
+.sdr-draft-head { display: flex; gap: 12px; align-items: flex-start; flex-wrap: wrap; }
+.sdr-draft-head strong { font-size: 0.98rem; }
+.sdr-draft-head .sub { display: block; color: var(--muted); font-size: 0.83rem; margin-top: 2px; }
+.sdr-draft-meta { margin-left: auto; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+/* The seller's own words, styled like an inbound bubble so the eye reads them
+   as theirs and not as part of our draft. */
+.sdr-said { margin-top: 12px; }
+.sdr-said p {
+  margin: 4px 0 0; padding: 9px 12px; border-radius: 12px; border-bottom-left-radius: 4px;
+  background: var(--wash); border: 1px solid var(--line); font-size: 0.9rem; color: var(--ink);
+}
+.sdr-said .k, .sdr-reply .k {
+  display: block; font-size: 0.71rem; text-transform: uppercase; letter-spacing: 0.07em;
+  color: var(--muted); font-weight: 700;
+}
+.sdr-reply { display: block; margin-top: 12px; }
+.sdr-reply textarea { margin-top: 4px; }
+
+.sdr-draft-foot {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  flex-wrap: wrap; margin-top: 10px;
+}
 
 /* ── auth ─────────────────────────────────────────────────────────────── */
 .authwrap { min-height: 100vh; display: grid; place-items: center; background: var(--navy-ink); padding: 20px; }
@@ -590,6 +651,174 @@ p.fine { margin: 8px 0 0; }
   .fields { grid-template-columns: 1fr; }
 }
 
+/* ── campaigns ────────────────────────────────────────────────────────────
+   A bulk send is the one screen where the interesting number is the one that
+   did NOT happen, so almost everything here exists to give suppressed
+   recipients as much visual weight as delivered ones. */
+
+/* The A2P registration, stated permanently. Navy rather than amber: it is not
+   a warning about a fault, it is the standing shape of what this account is
+   allowed to send, and an amber bar that never goes away is one people learn
+   to stop seeing inside a week. */
+.banner.a2pnote {
+  background: #eef3fb; border-color: #c9d8ee; color: var(--body);
+}
+.banner.a2pnote strong { color: var(--navy-ink); }
+
+.campaignsbar { display: flex; align-items: center; gap: 14px; }
+.campaignsbar span { flex: 1; }
+
+/* The audience cell stacks; every other .sub in a leads table already follows
+   a block .addr, so scoping this to the campaigns table keeps it from being a
+   change to any other page. */
+table.leads.campaigntbl td .sub { display: block; }
+
+/* ── picking an audience ──────────────────────────────────────────────────
+   Three cards rather than a dropdown. The choice between "buyers who asked to
+   hear about deals" and "sellers" is a compliance decision wearing the costume
+   of a form field, and a <select> presents the two as interchangeable. */
+.audiencepick { display: grid; grid-template-columns: repeat(3, 1fr); gap: 11px; }
+.audiencecard {
+  display: grid; gap: 6px; cursor: pointer;
+  border: 1.5px solid var(--line); border-radius: 10px; padding: 13px 15px;
+  background: #fff;
+}
+.audiencecard:hover { border-color: var(--navy); }
+.audiencecard.on { border-color: var(--navy); background: #eef3fb; box-shadow: 0 0 0 3px rgba(26,68,133,0.13); }
+.audiencecard .ahead { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.audiencecard .ahead input { flex-shrink: 0; }
+.audiencecard .ahead strong { font-size: 0.95rem; }
+.audiencecard .ahead em {
+  font-style: normal; font-size: 0.7rem; text-transform: uppercase;
+  letter-spacing: 0.07em; color: var(--muted); font-weight: 700;
+}
+
+.pickerblock { margin-top: 16px; border-top: 1px solid var(--line); padding-top: 15px; }
+.pickerblock .fields { margin-bottom: 4px; }
+.pickerblock p.fine { margin: 9px 0 0; }
+
+/* A scrolling list with a fixed ceiling. Tall enough to browse, short enough
+   that the ledger below it stays on the same screen — the two have to be
+   comparable at a glance or the preview stops being a preview. */
+.picklist {
+  margin-top: 11px; max-height: 300px; overflow-y: auto;
+  border: 1px solid var(--line); border-radius: 9px; background: #fff;
+}
+.pickrow {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 12px; border-bottom: 1px solid var(--line);
+  font-size: 0.88rem; cursor: pointer;
+}
+.pickrow:last-child { border-bottom: 0; }
+.pickrow:hover { background: var(--wash); }
+.pickrow.on { background: #eef3fb; box-shadow: inset 3px 0 0 var(--navy); }
+.pickrow .who { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pickrow .sub { color: var(--muted); font-size: 0.82rem; white-space: nowrap; }
+.pickrow input:disabled { cursor: not-allowed; }
+
+.pickedchips { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 11px; }
+.pickedchips .chip { padding: 5px 11px; font-size: 0.8rem; }
+
+/* The token palette. Each chip shows the token AND what it will resolve to on
+   this deal, because a chip reading only "{{spread}}" makes the operator guess
+   which of the two spreads it is — and that guess is the one mistake in a dispo
+   text a buyer actually notices. */
+.dealfacts { margin: 15px 0 11px; display: grid; gap: 7px; }
+.dealfacts .chip {
+  padding: 6px 12px; font-size: 0.84rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.dealfacts .chip .tokenval {
+  font-family: inherit; font-weight: 400; color: var(--muted); margin-left: 7px;
+}
+/* A token with nothing behind it stays visible rather than being hidden: the
+   sender refuses the whole send on an empty one, and "sqft is blank on this
+   deal" is a far better prompt than a chip that quietly is not there. */
+.dealfacts .chip:disabled { text-decoration: line-through; }
+.dealfacts p.fine { margin: 2px 0 0; }
+.dealfacts code, .pickerblock code {
+  background: var(--wash); border: 1px solid var(--line); border-radius: 5px;
+  padding: 1px 5px; font-size: 0.85rem;
+}
+
+.composerbody { min-height: 130px; }
+
+/* ── the ledger ───────────────────────────────────────────────────────────
+   "Will receive it" and "Suppressed" are the same size on purpose. Making the
+   success number bigger is how a send that reached 40 of 200 reads as a good
+   day. */
+.ledgerstats {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
+  gap: 13px; margin-bottom: 16px;
+}
+.lstat {
+  border: 1px solid var(--line); border-radius: 9px; padding: 10px 12px; background: var(--wash);
+}
+.lstat .k {
+  display: block; font-size: 0.69rem; text-transform: uppercase;
+  letter-spacing: 0.07em; color: var(--muted); font-weight: 700;
+}
+.lstat .v { display: block; font-size: 1.4rem; font-weight: 800; letter-spacing: -0.02em; margin-top: 2px; }
+.lstat.good { background: #e6f4ea; border-color: #b7e0c4; }
+.lstat.good .v { color: #0b6b34; }
+.lstat.bad { background: #fdecea; border-color: #f5c4bd; }
+.lstat.bad .v { color: #a11b0f; }
+
+.skipgroups { list-style: none; margin: 0; padding: 0; display: grid; gap: 9px; }
+.skipgroup { border: 1px solid var(--line); border-radius: 9px; padding: 11px 13px; background: var(--wash); }
+/* Three tones, because the reactions are three different things. Red is
+   somebody's legal position and there is nothing to do; amber is unfinished
+   work a person could go and finish; grey is the campaign working correctly
+   and colouring it like a problem is how people learn to ignore the red. */
+.skipgroup.stop { background: #fdecea; border-color: #f5c4bd; }
+.skipgroup.warn { background: #fef4e0; border-color: #f5dfa8; }
+.skipgroup.quiet { background: var(--wash); }
+
+.skiphead {
+  display: flex; align-items: baseline; gap: 10px; width: 100%;
+  background: none; border: 0; padding: 0; cursor: pointer; text-align: left; color: inherit;
+}
+.skiphead .n { font-size: 1.15rem; font-weight: 800; letter-spacing: -0.02em; min-width: 1.6em; }
+.skiphead .lbl { flex: 1; font-weight: 700; font-size: 0.92rem; }
+.skiphead .fine { text-decoration: underline; text-underline-offset: 2px; }
+.skipgroup .why { margin: 5px 0 0; color: var(--body); }
+
+.skipwho { list-style: none; margin: 11px 0 0; padding: 10px 0 0; border-top: 1px solid rgba(0,0,0,0.09); }
+.skipwho li { display: flex; gap: 10px; padding: 4px 0; font-size: 0.86rem; }
+.skipwho li span:first-child { flex: 1; }
+.skipwho .sub { color: var(--muted); font-size: 0.82rem; }
+
+/* ── one campaign ─────────────────────────────────────────────────────────── */
+.card > h2.detailhead {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+}
+.campaignmeta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 13px; }
+
+/* The exact text that went out, quoted rather than restated. It is the one
+   thing on this page nobody can change afterwards, and it should look like it. */
+.sentbody {
+  margin: 0; padding: 12px 15px; border-left: 3px solid var(--navy);
+  background: var(--wash); border-radius: 0 9px 9px 0;
+  font-size: 0.93rem; white-space: pre-wrap; overflow-wrap: anywhere;
+}
+
+/* The rendered example in the composer. Green rule, not navy: it is what a
+   buyer receives, as distinct from the template above it that Tossie writes. */
+.sentbody.rendered { margin-top: 12px; border-left-color: #0b6b34; background: #e6f4ea; }
+
+.rcptwrap { margin-top: 18px; border-top: 1px solid var(--line); overflow-x: auto; }
+table.leads.rcpt { font-size: 0.86rem; }
+table.leads.rcpt td { padding: 9px 12px; }
+table.leads.rcpt td .sub { display: block; }
+/* Twilio's own words about one message. Never truncated: the difference
+   between "resend it" and "the carrier will never take this" lives here. */
+.rcpterr { color: #a11b0f; overflow-wrap: anywhere; }
+
+@media (max-width: 860px) {
+  .audiencepick { grid-template-columns: 1fr; }
+  .campaignsbar { flex-direction: column; align-items: stretch; }
+}
+
 /* Nav items for phases not yet built. Explicitly marked rather than styled to
    look like links — an item that looks clickable and does nothing reads as a
    bug, which is exactly how the earlier placeholders came across. */
@@ -601,4 +830,274 @@ p.fine { margin: 8px 0 0; }
 .sidebar nav .navsoon em {
   font-style: normal; font-size: 0.66rem; text-transform: uppercase;
   letter-spacing: 0.08em; opacity: 0.75;
+}
+
+/* ── buyers ───────────────────────────────────────────────────────────────
+   The list is the asset, so it is denser than the leads table: four facts per
+   row rather than one, because the decision it supports — who hears about this
+   house first — is made by comparing rows, not by opening them. */
+table.leads .buybox { display: block; font-size: 0.88rem; color: var(--ink); }
+/* "Anywhere" is a real answer, not a missing one. An empty buy-box array means
+   no restriction, and a blank cell would read as the opposite. */
+table.leads .buybox .anyw { color: var(--muted); font-style: italic; }
+
+.record { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; font-size: 0.88rem; }
+.record .n { font-weight: 800; font-size: 0.98rem; }
+
+/* Proof of funds, aged. Amber and red rather than a date the operator has to do
+   arithmetic on — an out-of-date POF is the single cheapest thing to catch
+   before a buyer ties up a contract they cannot close. */
+.pofstate {
+  padding: 9px 12px; border-radius: 9px; font-size: 0.86rem; font-weight: 600;
+  margin-bottom: 14px; border: 1px solid;
+}
+.pofstate.ok   { background: #e6f4ea; border-color: #b7e0c4; color: #0b6b34; }
+.pofstate.warn { background: #fef4e0; border-color: #f5dfa8; color: #8a6100; }
+.pofstate.stop { background: #fdecea; border-color: #f5c4bd; color: #a11b0f; }
+
+/* Deal history. One line per deal, then the detail underneath, so the column of
+   status badges reads top to bottom as the relationship. */
+.dealhist { list-style: none; margin: 0; padding: 0; }
+.dealhist li { padding: 12px 0; border-bottom: 1px solid var(--line); }
+.dealhist li:first-child { padding-top: 0; }
+.dealhist li:last-child { border-bottom: 0; padding-bottom: 0; }
+.dealhist .line { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+.dealhist .line .what { font-weight: 700; font-size: 0.92rem; }
+/* The city sits on the address line, so it cannot use .sub — that one is a
+   block and would push it onto a line of its own inside the flex row. */
+.dealhist .line .where { color: var(--muted); font-weight: 400; font-size: 0.85rem; }
+.dealhist .line .spacer { flex: 1; }
+.dealhist .sub { display: block; color: var(--muted); font-size: 0.83rem; margin-top: 3px; }
+.dealhist .sub:empty { display: none; }
+
+/* Why this buyer was on that blast, frozen at send time. Folded away because it
+   is evidence rather than working detail — but present, because "why did this
+   person get this text" is a question that gets asked months later and by
+   somebody who is not the operator. */
+.matchwhy { margin-top: 6px; font-size: 0.8rem; color: var(--muted); }
+.matchwhy summary { cursor: pointer; }
+.matchwhy ul { margin: 6px 0 0; padding-left: 18px; }
+.matchwhy li { margin-bottom: 2px; }
+
+/* An anchor styled as a button still picks up the global link underline. */
+a.btn:hover { text-decoration: none; color: #fff; }
+a.btn.ghost:hover { color: var(--navy); }
+
+/* ── deals board ──────────────────────────────────────────────────────────
+   Reuses .board / .boardcol / .boardcard from the leads board, because it is
+   the same object on screen. The one thing it does not reuse is the grab
+   cursor: a deal card does not drag. A status move is refused by
+   deals_enforce_transition when it is illegal and by two CHECK constraints
+   when it arrives without a buyer or a close date, so the move lives on the
+   detail page where those can be collected into the same UPDATE. A card that
+   invites a drag it will then reject is worse than a card that does not. */
+.dealcard { cursor: pointer; gap: 5px; }
+
+/* Days to closing and days left in the inspection period — BUILD_PLAN §4 calls
+   these the two that cost real money, so they are the loudest thing on a card
+   and they read as a countdown rather than as a date. The date itself is in
+   the title attribute; nobody scanning a board is doing arithmetic. */
+.clocks { display: flex; flex-wrap: wrap; gap: 5px; margin: 2px 0 1px; }
+.clock {
+  display: inline-flex; align-items: baseline; gap: 5px;
+  padding: 3px 8px; border-radius: 100px; border: 1px solid var(--line);
+  background: var(--wash); color: var(--body);
+  font-size: 0.75rem; font-weight: 800; white-space: nowrap;
+}
+.clock .k { font-weight: 600; opacity: 0.7; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; }
+/* Green, matching .bigclock.ok on the detail page. Without a rule of its own
+   this fell through to the neutral base, so "inspection covered by a buyer" and
+   "no date on the contract" rendered the same grey — which is the one pair on
+   this card that must not look alike. */
+.clock.ok    { background: #e6f4ea; border-color: #b7e0c4; color: #1e5f34; }
+.clock.warn  { background: #fef4e0; border-color: #f5dfa8; color: #8a6100; }
+.clock.alarm { background: #fdecea; border-color: #f5c4bd; color: #a11b0f; }
+/* Past due is the only state that inverts. Amber and pale red are still things
+   you scan past; a solid block is not, and by then the money is already at
+   risk. */
+.clock.past  { background: #a11b0f; border-color: #a11b0f; color: #fff; }
+.clock.past .k { opacity: 0.85; }
+.clock.gone  { background: #f2f2f2; border-color: #e0e0e0; color: #8a8a8a; }
+.clock.none  { border-style: dashed; color: var(--muted); }
+
+.dealmoney {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
+  font-size: 0.81rem; color: var(--muted);
+}
+.dealmoney strong { font-size: 0.9rem; color: var(--ink); }
+
+/* Board / Money. A segmented control rather than two links: they are two views
+   of one page, not two destinations, and the browser back button should not
+   walk through them. */
+.viewtabs { display: flex; border: 1.5px solid var(--line); border-radius: 8px; overflow: hidden; background: #fff; }
+.viewtabs button {
+  border: 0; background: #fff; color: var(--body); cursor: pointer;
+  padding: 8px 16px; font-size: 0.88rem; font-weight: 700;
+}
+.viewtabs button + button { border-left: 1.5px solid var(--line); }
+.viewtabs button:hover { background: var(--wash); }
+.viewtabs button.on { background: var(--navy); color: #fff; }
+
+.tickbox { display: flex; align-items: center; gap: 7px; font-size: 0.88rem; color: var(--body); cursor: pointer; }
+
+.newdeal { display: flex; gap: 9px; flex-wrap: wrap; }
+.newdeal input {
+  flex: 1 1 260px; padding: 9px 12px; border: 1.5px solid var(--line);
+  border-radius: 8px; font-size: 0.92rem; color: var(--ink);
+}
+.newdeal input:focus { outline: 0; border-color: var(--navy); box-shadow: 0 0 0 3px rgba(26,68,133,0.13); }
+
+/* ── the money view ─────────────────────────────────────────────────────── */
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; margin-bottom: 16px; }
+.tile { background: #fff; border: 1px solid var(--line); border-radius: 11px; padding: 15px 17px; }
+.tile .k {
+  display: block; font-size: 0.71rem; text-transform: uppercase; letter-spacing: 0.07em;
+  color: var(--muted); font-weight: 700;
+}
+.tile .v { display: block; font-size: 1.6rem; font-weight: 800; letter-spacing: -0.03em; margin-top: 4px; }
+.tile .n { display: block; font-size: 0.81rem; color: var(--muted); margin-top: 3px; }
+
+/* Months as bars rather than a table. The question these answer is "which
+   month is heavy", and a column of right-aligned numbers makes that a reading
+   exercise. */
+.moneyrows { list-style: none; margin: 0; padding: 0; display: grid; gap: 7px; }
+.moneyrows li { display: grid; grid-template-columns: 88px 1fr 96px 34px; align-items: center; gap: 10px; font-size: 0.86rem; }
+.mlabel { color: var(--body); font-weight: 600; }
+.mbar { background: var(--wash); border-radius: 100px; height: 10px; overflow: hidden; }
+.mbar i { display: block; height: 100%; background: var(--navy); border-radius: 100px; }
+.mval { text-align: right; font-weight: 700; }
+.mn { text-align: right; color: var(--muted); font-size: 0.8rem; }
+
+.funnel { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.funnel li { display: grid; grid-template-columns: 88px 1fr 46px 46px; align-items: center; gap: 10px; font-size: 0.86rem; }
+.fk { font-weight: 700; }
+.fbar { background: var(--wash); border-radius: 100px; height: 12px; overflow: hidden; }
+.fbar i { display: block; height: 100%; background: var(--coral); border-radius: 100px; }
+.fn { text-align: right; font-weight: 700; }
+.fp { text-align: right; color: var(--muted); }
+
+/* ── deal detail ──────────────────────────────────────────────────────────
+   The header carries the address and the two clocks at size, because those
+   three facts are why the page was opened; everything below is detail. */
+/* Qualified with the element because `.main > header` already sets
+   align-items: baseline at the same specificity, and a baseline-aligned row of
+   countdown blocks hangs them off the address instead of squaring them up. */
+header.dealhead { align-items: flex-start; justify-content: space-between; flex-wrap: wrap; }
+.dealhead h1 { margin: 0; }
+.dealhead .sub { margin: 3px 0 0; color: var(--muted); font-size: 0.88rem; }
+.dealclocks { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+.bigclock {
+  display: inline-grid; gap: 1px; min-width: 118px;
+  padding: 9px 13px; border-radius: 10px;
+  border: 1px solid var(--line); background: #fff;
+}
+.bigclock .k { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); font-weight: 700; }
+.bigclock .v { font-size: 1.05rem; font-weight: 800; letter-spacing: -0.02em; }
+.bigclock .d { font-size: 0.76rem; color: var(--muted); }
+.bigclock.ok    { background: #e6f4ea; border-color: #b7e0c4; }
+.bigclock.warn  { background: #fef4e0; border-color: #f5dfa8; }
+.bigclock.warn .v { color: #8a6100; }
+.bigclock.alarm { background: #fdecea; border-color: #f5c4bd; }
+.bigclock.alarm .v { color: #a11b0f; }
+.bigclock.past  { background: #a11b0f; border-color: #a11b0f; }
+.bigclock.past .k, .bigclock.past .d { color: rgba(255,255,255,0.82); }
+.bigclock.past .v { color: #fff; }
+.bigclock.gone  { background: #f2f2f2; border-color: #e0e0e0; }
+.bigclock.gone .v { color: #8a8a8a; }
+.bigclock.none  { border-style: dashed; }
+.bigclock.none .v { color: var(--muted); font-weight: 700; }
+
+/* The numbers the database derives, set apart from the ones a human types so
+   nobody goes looking for the edit cursor on a GENERATED column. */
+.derived { margin-top: 15px; border-top: 1px solid var(--line); padding-top: 14px; display: grid; gap: 11px; }
+.drow { display: grid; grid-template-columns: 130px auto; gap: 4px 14px; align-items: baseline; }
+.drow .k { color: var(--muted); font-weight: 600; font-size: 0.9rem; }
+.drow .v { font-size: 1.05rem; font-weight: 800; letter-spacing: -0.02em; }
+.drow .w { grid-column: 2; font-size: 0.81rem; color: var(--muted); }
+.drow.bad .v { color: #a11b0f; }
+
+.mstones { list-style: none; margin: 15px 0 0; padding: 13px 0 0; border-top: 1px solid var(--line); display: grid; gap: 8px; }
+.mstones li {
+  display: grid; grid-template-columns: 1fr auto auto auto; align-items: center; gap: 10px;
+  font-size: 0.86rem; padding: 8px 11px; border-radius: 8px;
+  background: var(--wash); border: 1px solid var(--line);
+}
+.mstones .mk { font-weight: 700; }
+.mstones .mk em {
+  font-style: normal; margin-left: 6px; font-size: 0.66rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted);
+}
+.mstones .mwhen { color: var(--muted); font-size: 0.81rem; }
+.mstones .mdays { font-weight: 800; white-space: nowrap; }
+.mstones li.warn  { background: #fef4e0; border-color: #f5dfa8; }
+.mstones li.alarm { background: #fdecea; border-color: #f5c4bd; }
+.mstones li.alarm .mdays { color: #a11b0f; }
+.mstones li.past  { background: #fdecea; border-color: #a11b0f; }
+.mstones li.past .mdays { color: #a11b0f; }
+.mstones li.done { opacity: 0.6; }
+.mstones li.done .mk { text-decoration: line-through; }
+
+.statusmove { display: grid; gap: 11px; }
+.statusmove .now { margin: 0; }
+.statusmove > select, .movefield select, .movefield input {
+  width: 100%; padding: 9px 12px; border: 1.5px solid var(--line);
+  border-radius: 8px; font-size: 0.92rem; color: var(--ink); background: #fff;
+}
+.statusmove > select:focus, .movefield select:focus, .movefield input:focus {
+  outline: 0; border-color: var(--navy); box-shadow: 0 0 0 3px rgba(26,68,133,0.13);
+}
+.statusmove p.fine { margin: 0; }
+/* The companion facts a CHECK constraint will demand. Shown as required rather
+   than as optional extras, because leaving one blank is not a softer version
+   of the move — it is an UPDATE the database rejects outright. */
+.movefield { display: grid; gap: 5px; font-size: 0.8rem; font-weight: 700; color: var(--ink); }
+.movefield small { font-weight: 400; font-size: 0.79rem; color: var(--muted); }
+
+.hits { list-style: none; margin: 11px 0 0; padding: 0; display: grid; gap: 2px; }
+.hits li { border-top: 1px solid var(--line); }
+/* A row of search results, not a row of links. Underlining both lines of eight
+   results makes the panel unreadable; the hover state carries the affordance. */
+.hits .linkbtn {
+  display: grid; gap: 1px; text-align: left; padding: 9px 2px; width: 100%;
+  color: var(--ink); text-decoration: none; font-size: 0.87rem;
+}
+.hits .linkbtn:hover { background: var(--wash); }
+.hits .sub { color: var(--muted); font-size: 0.81rem; font-weight: 400; }
+
+.interest { list-style: none; margin: 0; padding: 0; display: grid; gap: 11px; }
+.interest li { display: grid; gap: 2px; padding-bottom: 11px; border-bottom: 1px solid var(--line); }
+.interest li:last-child { border-bottom: 0; padding-bottom: 0; }
+.interest .who { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-weight: 700; font-size: 0.9rem; }
+.interest .sub { color: var(--muted); font-size: 0.81rem; }
+.interest .why { color: var(--body); font-size: 0.79rem; }
+
+.uploadbar { display: flex; gap: 9px; flex-wrap: wrap; margin-bottom: 14px; }
+.uploadbar select {
+  flex: 1 1 200px; padding: 9px 12px; border: 1.5px solid var(--line);
+  border-radius: 8px; font-size: 0.9rem; color: var(--ink); background: #fff;
+}
+/* The file picker is a <label> wrapping a hidden input, so it needs a block
+   display for .btn's padding to hold the box open. */
+.uploadbar .btn { display: inline-flex; align-items: center; cursor: pointer; }
+
+.docs { list-style: none; margin: 0; padding: 0; }
+.docs li {
+  display: grid; grid-template-columns: 1fr auto; gap: 3px 12px;
+  padding: 10px 0; border-bottom: 1px solid var(--line);
+}
+.docs li:last-child { border-bottom: 0; }
+/* Placed rather than flowed: the name and its detail stack in one column and
+   the remove control sits beside both, instead of landing wherever
+   auto-placement happens to put a third child. */
+.docs .name { grid-area: 1 / 1; text-align: left; padding: 0; color: var(--ink); font-size: 0.9rem; }
+.docs .sub { grid-area: 2 / 1; color: var(--muted); font-size: 0.81rem; }
+.docs .linkbtn.danger { grid-area: 1 / 2 / span 2 / 3; align-self: center; }
+
+@media (max-width: 860px) {
+  .dealclocks { width: 100%; }
+  .moneyrows li { grid-template-columns: 74px 1fr 84px; }
+  .moneyrows .mn { display: none; }
+  .mstones li { grid-template-columns: 1fr auto; }
+  .mstones .mwhen { grid-column: 1; }
 }

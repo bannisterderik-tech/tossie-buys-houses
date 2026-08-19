@@ -6,15 +6,18 @@ const NAV = [
   { to: '/', label: 'Leads' },
   { to: '/dialer', label: 'Dialer' },
   { to: '/messages', label: 'Messages' },
+  { to: '/sdr', label: 'AI SDR' },
   { to: '/board', label: 'Board' },
+  { to: '/buyers', label: 'Buyers' },
+  { to: '/deals', label: 'Deals' },
+  { to: '/campaigns', label: 'Campaigns' },
   { to: '/import', label: 'Import' },
   { to: '/settings/phone', label: 'Phone settings' },
 ];
 
-// Phase 5. Still inert, and labelled so — an item that looks like a link and
-// does nothing reads as a bug, which is exactly how the previous placeholders
-// came across.
-const SOON = ['Deals', 'Buyers'];
+// Kept for the next placeholder. An item that looks like a link and does
+// nothing reads as a bug, which is exactly how the previous ones came across.
+const SOON = [];
 
 export default function Layout({ session, children }) {
   const path = useRoute();

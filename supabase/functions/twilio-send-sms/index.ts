@@ -57,10 +57,12 @@
 // never prefixed VITE_):
 //   TWILIO_ACCOUNT_SID
 //   TWILIO_AUTH_TOKEN
-//   TWILIO_STATUS_CALLBACK_URL   optional. When set, Twilio posts delivery
-//                                receipts there. Omitted rather than guessed —
-//                                a wrong callback URL strands every message at
-//                                'queued' forever and looks like a send bug.
+//   TWILIO_STATUS_CALLBACK_URL   optional OVERRIDE. Delivery receipts default
+//                                to twilio-webhook on this same project,
+//                                derived from SUPABASE_URL. Set this only when
+//                                that derived URL is not the reachable one —
+//                                a custom domain in front of the project, or a
+//                                staging project pointed at a shared number.
 // ============================================================================
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
@@ -546,8 +548,26 @@ Deno.serve(async (req: Request) => {
   }
 
   const form = new URLSearchParams({ To: to, From: fromNumber.e164, Body: messageBody });
-  const statusCallback = Deno.env.get('TWILIO_STATUS_CALLBACK_URL') || '';
-  if (statusCallback) form.set('StatusCallback', statusCallback);
+
+  // DEFAULTED NOW, AND DELIBERATELY NOT BEFORE. This used to be omitted unless
+  // an env var was set, and that was right at the time: no endpoint in this
+  // project handled MessageStatus, so any URL here would have been a guess, and
+  // a wrong StatusCallback strands every message at 'queued' forever while
+  // looking exactly like a send bug. twilio-webhook now has a MessageStatus
+  // branch, so the derived URL is not a guess — it is the same function Twilio
+  // already POSTs inbound messages to, on the same project, built from the same
+  // SUPABASE_URL this function is already using for everything else. Derived
+  // rather than configured for the reason twilio-voice derives SELF_URL: one
+  // place for a project reference to be wrong instead of two.
+  //
+  // Without it the row this function just wrote never leaves 'queued', and the
+  // operator cannot tell a delivered text from one the carrier dropped — which
+  // is the difference between following up on a seller and writing them off.
+  //
+  // The env var stays, as an override rather than a switch.
+  const statusCallback = Deno.env.get('TWILIO_STATUS_CALLBACK_URL')
+    || `${supabaseUrl}/functions/v1/twilio-webhook`;
+  form.set('StatusCallback', statusCallback);
 
   let twilio: Record<string, unknown> = {};
   let twilioOk = false;

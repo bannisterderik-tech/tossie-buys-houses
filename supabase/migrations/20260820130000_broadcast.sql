@@ -254,9 +254,15 @@ CREATE TABLE IF NOT EXISTS public.broadcast_campaigns (
   -- must name its recipients, one uuid at a time, and materialise_campaign caps
   -- how many. Picking 200 sellers by hand is possible; it is also slow enough
   -- that somebody notices what they are doing, which is the point.
+  --
+  -- COALESCE, not a bare comparison: a filter with no 'lead_ids' key at all
+  -- makes `->` return SQL NULL, jsonb_typeof(NULL) is NULL, and `NULL =
+  -- 'array'` is NULL — which a CHECK constraint treats as satisfied. The one
+  -- shape this rail exists to reject is exactly the one that would have slipped
+  -- through it.
   CONSTRAINT broadcast_campaigns_leads_need_explicit_ids CHECK (
     audience_kind <> 'leads'
-    OR jsonb_typeof(audience_filter -> 'lead_ids') = 'array'
+    OR COALESCE(jsonb_typeof(audience_filter -> 'lead_ids') = 'array', false)
   ),
 
   -- Every message in a bulk send carries its own way out. Carriers look for
@@ -310,9 +316,15 @@ CREATE TABLE IF NOT EXISTS public.broadcast_recipients (
   buyer_id uuid REFERENCES public.buyers(id) ON DELETE SET NULL,
   lead_id  uuid REFERENCES public.leads(id)  ON DELETE SET NULL,
 
-  -- Normalised at materialise time to the form the send path wants. Stored
-  -- rather than joined so a deleted buyer still leaves a number in the ledger.
-  phone_e164 text NOT NULL,
+  -- The number as materialise_campaign found it. Stored rather than joined so a
+  -- deleted buyer still leaves a number in the ledger.
+  --
+  -- Nullable ONLY for the one skip reason that means there was no number to
+  -- record. Dropping those rows instead would be the exact failure this file
+  -- exists to prevent in miniature: an audience of 200 reporting 187, with the
+  -- 13 contacts nobody can text invisible — and "why is our buyers list not
+  -- reaching people" unanswerable. See the CHECK below.
+  phone_e164 text,
 
   status      text NOT NULL DEFAULT 'pending',
   skip_reason text,
@@ -379,6 +391,13 @@ CREATE TABLE IF NOT EXISTS public.broadcast_recipients (
     num_nonnulls(buyer_id, lead_id) <= 1
   ),
 
+  -- A row without a number is only ever the record of a contact who had none.
+  -- Anything else with a NULL here would be a message the ledger claims to have
+  -- sent somewhere it cannot name.
+  CONSTRAINT broadcast_recipients_needs_phone_unless_thats_the_reason CHECK (
+    phone_e164 IS NOT NULL OR skip_reason = 'no_phone'
+  ),
+
   CONSTRAINT broadcast_recipients_attempts_check CHECK (attempts >= 0),
 
   -- Belt and braces on tenancy. RLS already stops a signed-in user crossing
@@ -402,8 +421,25 @@ CREATE TABLE IF NOT EXISTS public.broadcast_recipients (
 -- Not partial on status: a skipped row occupies the slot too, which is what
 -- makes the fail-closed dedup in materialise_campaign work. See the DISTINCT
 -- ON there.
+--
+-- phone_key(NULL) is NULL and a unique index permits many NULLs, which is
+-- exactly right: the 'no_phone' rows are all distinct contacts and must not
+-- collapse into one another.
 CREATE UNIQUE INDEX IF NOT EXISTS broadcast_recipients_campaign_phone_idx
   ON public.broadcast_recipients(campaign_id, public.phone_key(phone_e164));
+
+-- ONE SUBJECT, ONE ROW, PER CAMPAIGN — the other half of the same rule.
+--
+-- The phone index cannot cover a contact with no number, because phone_key
+-- returns NULL there and a unique index treats every NULL as distinct. That is
+-- deliberately what lets the 'no_phone' rows coexist, and it is also a hole:
+-- without these two, re-materialising a draft would add a second row for every
+-- contact who has no number, and the audience would grow a little each time
+-- somebody clicked the button twice.
+CREATE UNIQUE INDEX IF NOT EXISTS broadcast_recipients_campaign_buyer_idx
+  ON public.broadcast_recipients(campaign_id, buyer_id) WHERE buyer_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS broadcast_recipients_campaign_lead_idx
+  ON public.broadcast_recipients(campaign_id, lead_id) WHERE lead_id IS NOT NULL;
 
 CREATE INDEX IF NOT EXISTS broadcast_recipients_campaign_status_idx
   ON public.broadcast_recipients(campaign_id, status);
@@ -596,9 +632,9 @@ BEGIN
   )
   ON CONFLICT (deal_id, buyer_id) DO UPDATE
     SET notified_at   = COALESCE(NEW.sent_at, now()),
-        match_score   = COALESCE(EXCLUDED.match_score, public.buyer_deal_interest.match_score),
+        match_score   = COALESCE(EXCLUDED.match_score, buyer_deal_interest.match_score),
         match_reasons = CASE WHEN EXCLUDED.match_reasons = '{}'::text[]
-                             THEN public.buyer_deal_interest.match_reasons
+                             THEN buyer_deal_interest.match_reasons
                              ELSE EXCLUDED.match_reasons END;
 
   RETURN NULL;
@@ -742,7 +778,10 @@ BEGIN
       team_id, campaign_id, buyer_id, phone_e164, status, skip_reason,
       match_score, match_reasons
     )
-    SELECT DISTINCT ON (public.phone_key(cand.phone))
+    -- Deduped by number when there is one and by identity when there is not:
+    -- DISTINCT ON treats NULLs as equal, so keying on the number alone would
+    -- collapse every 'no_phone' buyer into a single row and hide the rest.
+    SELECT DISTINCT ON (COALESCE(public.phone_key(cand.phone), cand.id::text))
            cand.team_id, p_campaign_id, cand.id, cand.phone,
            CASE WHEN cand.reason IS NULL THEN 'pending' ELSE 'skipped' END,
            cand.reason,
@@ -760,17 +799,16 @@ BEGIN
                  ON m.buyer_id = b.id
          WHERE b.team_id = v_camp.team_id
       ) cand
-     -- A buyer with no number at all has nothing to key the ledger on. They are
-     -- not silently dropped from the operator's view — buyer_skip_reason still
-     -- says 'no_phone' on the buyers screen — but a recipient row whose
-     -- phone_e164 is NULL cannot exist and could not be deduped if it did.
-     WHERE cand.phone IS NOT NULL
      -- Fail-closed dedup. When one number reaches the audience twice and the
      -- two rows disagree, the SUPPRESSED decision wins: `reason IS NULL` sorts
      -- false-first, so a skip beats a send. Getting this backwards would mean a
      -- duplicate row could launder an opt-out into a delivery.
-     ORDER BY public.phone_key(cand.phone), (cand.reason IS NULL), cand.score DESC NULLS LAST
-    ON CONFLICT (campaign_id, public.phone_key(phone_e164)) DO NOTHING;
+     ORDER BY COALESCE(public.phone_key(cand.phone), cand.id::text),
+              (cand.reason IS NULL), cand.score DESC NULLS LAST
+    -- No inference target: the audience is deduped by number AND by subject,
+    -- and ON CONFLICT can only name one index. Bare DO NOTHING catches both, so
+    -- a re-run of a draft tops up rather than growing the list a row at a time.
+    ON CONFLICT DO NOTHING;
 
   -- ── buyers ────────────────────────────────────────────────────────────────
   ELSIF v_camp.audience_kind = 'buyers' THEN
@@ -787,7 +825,7 @@ BEGIN
     INSERT INTO public.broadcast_recipients (
       team_id, campaign_id, buyer_id, phone_e164, status, skip_reason
     )
-    SELECT DISTINCT ON (public.phone_key(cand.phone))
+    SELECT DISTINCT ON (COALESCE(public.phone_key(cand.phone), cand.id::text))
            cand.team_id, p_campaign_id, cand.id, cand.phone,
            CASE WHEN cand.reason IS NULL THEN 'pending' ELSE 'skipped' END,
            cand.reason
@@ -804,9 +842,12 @@ BEGIN
                   WHERE public.text_array_contains_ci(b.counties, c)))
            AND (v_min_rating IS NULL OR COALESCE(b.rating, 0) >= v_min_rating)
       ) cand
-     WHERE cand.phone IS NOT NULL
-     ORDER BY public.phone_key(cand.phone), (cand.reason IS NULL)
-    ON CONFLICT (campaign_id, public.phone_key(phone_e164)) DO NOTHING;
+     ORDER BY COALESCE(public.phone_key(cand.phone), cand.id::text),
+              (cand.reason IS NULL)
+    -- No inference target: the audience is deduped by number AND by subject,
+    -- and ON CONFLICT can only name one index. Bare DO NOTHING catches both, so
+    -- a re-run of a draft tops up rather than growing the list a row at a time.
+    ON CONFLICT DO NOTHING;
 
   -- ── leads ─────────────────────────────────────────────────────────────────
   ELSE
@@ -836,7 +877,7 @@ BEGIN
     INSERT INTO public.broadcast_recipients (
       team_id, campaign_id, lead_id, phone_e164, status, skip_reason
     )
-    SELECT DISTINCT ON (public.phone_key(cand.phone))
+    SELECT DISTINCT ON (COALESCE(public.phone_key(cand.phone), cand.id::text))
            cand.team_id, p_campaign_id, cand.id, cand.phone,
            CASE WHEN cand.reason IS NULL THEN 'pending' ELSE 'skipped' END,
            cand.reason
@@ -848,9 +889,12 @@ BEGIN
          WHERE l.team_id = v_camp.team_id
            AND l.id = ANY(v_lead_ids)
       ) cand
-     WHERE cand.phone IS NOT NULL
-     ORDER BY public.phone_key(cand.phone), (cand.reason IS NULL)
-    ON CONFLICT (campaign_id, public.phone_key(phone_e164)) DO NOTHING;
+     ORDER BY COALESCE(public.phone_key(cand.phone), cand.id::text),
+              (cand.reason IS NULL)
+    -- No inference target: the audience is deduped by number AND by subject,
+    -- and ON CONFLICT can only name one index. Bare DO NOTHING catches both, so
+    -- a re-run of a draft tops up rather than growing the list a row at a time.
+    ON CONFLICT DO NOTHING;
   END IF;
 
   -- The stamp that closes the audience. Set last, so a failure anywhere above
