@@ -1101,3 +1101,13 @@ header.dealhead { align-items: flex-start; justify-content: space-between; flex-
   .mstones li { grid-template-columns: 1fr auto; }
   .mstones .mwhen { grid-column: 1; }
 }
+
+/* ── list / board view toggle ─────────────────────────────────────────── */
+.viewtoggle { display: inline-flex; border: 1.5px solid var(--line); border-radius: 8px; overflow: hidden; }
+.viewtoggle button {
+  background: #fff; border: 0; cursor: pointer; padding: 7px 15px;
+  font-size: 0.86rem; font-weight: 600; color: var(--muted);
+}
+.viewtoggle button + button { border-left: 1.5px solid var(--line); }
+.viewtoggle button:hover { background: #f4f7fb; color: var(--ink); }
+.viewtoggle button[aria-pressed="true"] { background: var(--navy); color: #fff; }

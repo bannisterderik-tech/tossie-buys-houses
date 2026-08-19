@@ -12,7 +12,6 @@ const NAV = [
   { to: '/dialer', label: 'Dialer' },
   { to: '/messages', label: 'Messages' },
   { to: '/sdr', label: 'AI SDR' },
-  { to: '/board', label: 'Board' },
   { to: '/buyers', label: 'Buyers' },
   { to: '/deals', label: 'Deals' },
   { to: '/campaigns', label: 'Campaigns' },

@@ -5,7 +5,6 @@ import AuthPage from './components/AuthPage.jsx';
 import Layout from './components/Layout.jsx';
 import LeadsPage from './pages/LeadsPage.jsx';
 import LeadDetail from './pages/LeadDetail.jsx';
-import BoardPage from './pages/BoardPage.jsx';
 import NewLeadPage from './pages/NewLeadPage.jsx';
 import TodayPage from './pages/TodayPage.jsx';
 import ImportPage from './pages/ImportPage.jsx';
@@ -88,7 +87,11 @@ export default function App() {
         : prospectId ? <ProspectDetail id={prospectId} />
         : path === '/prospects' ? <ProspectsPage />
         : path === '/import' ? <ImportPage />
-        : path === '/board' ? <BoardPage />
+        // Leads and Board are one page with a view toggle. This stays as a deep
+        // link so existing bookmarks land somewhere real; the key forces a
+        // remount so arriving here actually selects the board, rather than
+        // React reusing the instance and keeping the last-used view.
+        : path === '/board' ? <LeadsPage key="board" initialView="board" />
         : path === '/settings/phone' ? <PhoneSettingsPage />
         : path === '/' ? <LeadsPage />
         : <NotFound path={path} />}
