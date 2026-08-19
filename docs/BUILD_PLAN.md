@@ -769,3 +769,89 @@ warning text:
 
 If Tossie wants cold SMS at volume, that is a second campaign with a truthful use
 case, registered separately. Worth his attorney's eye before the first send.
+
+---
+
+## 13. Migration from the previous CRM (2026-08-19)
+
+345 leads and 70 buyer contacts were imported from the previous CRM's exports
+(`Exported_Leads_84205 AM.csv`, `Buyers.csv`). Recorded here because the mapping
+decisions are judgement calls that the next person will otherwise have to guess.
+
+### Status -> board column
+
+The exporting CRM's vocabulary, mapped onto `leads.status` and the Acquisitions
+pipeline. `lead_pipeline_memberships` is written by the insert trigger, which
+always drops a new lead in the *first* stage -- so a bulk import needs an
+explicit second pass or the whole board lands in "New" while the status column
+says otherwise.
+
+| Previous CRM      | `leads.status`   | Board column    | n   |
+|-------------------|------------------|-----------------|-----|
+| New Leads         | `new`            | New             | 3   |
+| Called No Answer  | `attempting`     | Attempting      | 71  |
+| Follow Up         | `contacted`      | Contacted       | 24  |
+| Offers Made       | `offer_made`     | Offer Made      | 11  |
+| Under Contract    | `under_contract` | Under Contract  | 8   |
+| Nuture *(sic)*    | `nurture`        | Nurture         | 4   |
+| Dead Lead         | `dead`           | Dead            | 223 |
+| Referred To Agent | `dead`           | Dead            | 1   |
+
+`Referred To Agent` carries the `referred-to-agent` tag so the outcome is not
+lost inside the 224 dead leads.
+
+### Consent basis, per source
+
+The export carries no consent evidence column, so the basis is inferred from
+the source and recorded with provenance rather than assumed:
+
+- **Pay Per Lead (301)** -- seller-submitted vendor forms (iSpeedToLead,
+  PropertyLeads, Leadzolo, Motivated Sellers). `tcpa_opt_in = true`, with
+  `tcpa_disclosure_source` naming the vendor and the disclosure text stating the
+  consent was captured by the vendor, not by Tossie. If a vendor's own opt-in
+  language turns out not to cover Tossie, these are the rows to revisit.
+- **Website (18)** -- tossiebuyshouses.com form. `tcpa_opt_in = true`.
+- **Foreclosure Auction (24)** and **Other (2)** -- public record and unknown.
+  `tcpa_opt_in = false`, so `lead_is_dialable` keeps them untextable until
+  someone logs consent on the lead. They are still callable.
+
+### Suppression carried across
+
+17 leads whose call notes record a removal request -- "Wants to be taken off the
+list", "Replied STOP", "take off our list", "DNC list" -- were set `is_dnc` **and**
+written into `telephony_opt_outs` (source `manual`). Carrying the flag without
+the opt-out row would have let a campaign text them anyway, since
+`broadcast-send` scrubs against the opt-out table, not the lead flag.
+
+9 leads whose notes record a dead number ("Non-working phone number", "not in
+service", "has been disconnected") were set `phone_invalid`.
+
+### Where the rest of the data went
+
+- The previous CRM kept its hand-written call history in **"Dead Lead Reason"** --
+  that is the real note, so all 224 non-empty values became `lead_notes` rows
+  dated to the lead's creation date, not left buried in jsonb.
+- Deal money (offer price/date, contract price, closing date, expected profit,
+  assignment date), lot size, tax figures and the appointment date have no
+  column on `leads`; they are summarised in `leads.notes` and preserved verbatim
+  in `raw_payload`. **20 leads carry complete contract data and no `deals` row
+  exists for them yet** -- that is the obvious next step.
+- Buyer "Tags" in the export is overloaded: a bare number is this team's 1-5
+  rating, anything else is property types. Mapped accordingly.
+- Buyers imported with `consent_sms = false` and `tcpa_opt_in = false`: no
+  consent evidence came across with the list. The campaign audience already
+  surfaces this as a per-buyer skip reason, so dispo blasts will suppress all 69
+  until someone logs what each buyer actually agreed to.
+
+### Verification
+
+Both loads were checked by computing an MD5 fingerprint over 21 lead fields
+(and 13 buyer fields) independently from the source CSV and from the database
+and comparing -- plus a direct CSV-to-database recheck of name, phone, status,
+city and zip on all 345 rows. 0 mismatches. 345 distinct previous-CRM Property
+IDs in, 345 out.
+
+Two source-data notes: "Carol Burton" appears twice in `Buyers.csv` as a
+byte-identical row (same phone), so 69 buyers landed rather than 70; and 4 leads
+are the previous CRM's own test records (`test@resimpli.com`, dead reason
+"test"). They were imported faithfully rather than silently dropped.
