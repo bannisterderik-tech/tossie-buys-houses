@@ -58,6 +58,8 @@ export const STARTUP_FAILURES = {
     'This browser cannot place calls. The softphone needs WebRTC and this browser does not offer it. Chrome, Edge or Firefox will work; calls can still be placed from a desk phone in the meantime.',
   insecure_origin:
     'The page is not on a secure origin, so the browser refuses to hand out a microphone at all. Open the app over https and the softphone works.',
+  mic_policy_blocked:
+    'The page itself is blocking the microphone, so no browser setting can turn it on. Its Permissions-Policy header has to allow microphone=(self) — this is a deployment fix, not something to change on this machine.',
   mic_denied:
     'The microphone is blocked for this site, and a call nobody can speak on is not a call. Allow the microphone from the icon in the browser’s address bar, then reload this page.',
   no_mic:
@@ -263,6 +265,22 @@ async function probeMicrophone() {
   if (!navigator.mediaDevices?.getUserMedia) {
     throw new StartupError(window.isSecureContext === false ? 'insecure_origin' : 'unsupported');
   }
+  // Ask the page's own Permissions-Policy BEFORE prompting.
+  //
+  // A `Permissions-Policy: microphone=()` header forbids the microphone to every
+  // origin including this one, and getUserMedia then rejects with the very same
+  // NotAllowedError the browser uses when a person clicks Block. The two need
+  // completely different fixes and only one of them is possible for the
+  // operator: when the header is the cause there is no address-bar icon to
+  // click, because the site is what is refusing. Telling someone to change a
+  // browser setting that cannot help is worse than saying nothing.
+  //
+  // This app shipped exactly that header for months before it became a phone.
+  const policy = document.featurePolicy || document.permissionsPolicy;
+  if (policy && typeof policy.allowsFeature === 'function' && !policy.allowsFeature('microphone')) {
+    throw new StartupError('mic_policy_blocked');
+  }
+
   let stream;
   try {
     stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -305,6 +323,47 @@ function fail(reason, text) {
 }
 
 function wireDevice(d) {
+  // Route inbound audio to a real output device on register.
+  //
+  // Two separate hazards here, and the second is far worse than the first.
+  //
+  // (1) Twilio's auto-pick is occasionally wrong — it selects an output that is
+  //     not plugged in, and the call has inbound audio going nowhere. Setting it
+  //     explicitly fixes that.
+  //
+  // (2) speakerDevices.set() returns a Promise that REJECTS ASYNCHRONOUSLY when
+  //     the device id is not in availableOutputDevices. A try/catch does not
+  //     catch it. reoperative shipped exactly that bug, and the consequence was
+  //     not a stray console warning: in the rejected state, subsequent
+  //     device.connect() calls silently failed to reach Twilio, so calls stopped
+  //     connecting AND stopped writing call_log rows, with nothing on screen to
+  //     say so. A dialer that quietly stops dialing is the worst failure this
+  //     file can have.
+  //
+  // So: preflight against availableOutputDevices, and .catch() the promise even
+  // though some SDK builds return undefined synchronously.
+  d.on('registered', () => {
+    if (device !== d) return;
+    try {
+      const outputs = d.audio?.availableOutputDevices;
+      const setSpeaker = d.audio?.speakerDevices?.set;
+      if (typeof setSpeaker !== 'function' || !outputs || outputs.size === 0) return;
+
+      const ids = Array.from(outputs.keys?.() || []);
+      const target = ids.includes('default') ? 'default' : (ids[0] || null);
+      if (!target) return;
+
+      const result = d.audio.speakerDevices.set(target);
+      if (result && typeof result.catch === 'function') {
+        result.catch((e) => {
+          console.warn('[softphone] speakerDevices.set rejected (non-fatal):', e?.message || e);
+        });
+      }
+    } catch (e) {
+      console.warn('[softphone] could not set the output device (non-fatal):', e?.message || e);
+    }
+  });
+
   d.on('error', (err) => {
     if (device !== d) return;
     // 31202 is AccessTokenSignatureValidationFailed, and the raw code is worse
@@ -412,10 +471,29 @@ function start() {
       if (gen !== generation) return;
 
       const d = new Device(token, {
-        // Opus first for quality, PCMU as the fallback every carrier bridge
-        // understands. Left to itself the SDK negotiates the same thing, but
-        // pinning it means a browser update cannot quietly change call quality.
-        codecPreferences: ['opus', 'pcmu'],
+        // PCMU FIRST, and this order is not a preference — it is a fix.
+        // reoperative learned it in production: a WebRTC-to-PSTN bridge can
+        // drop audio outright when Opus is negotiated and Twilio cannot
+        // transcode in time, and the symptom is a connected call with silence
+        // rather than an error anyone can see. PCMU is the lowest common
+        // denominator every carrier bridge speaks. Quality is the wrong thing
+        // to optimise against a seller who cannot hear you.
+        codecPreferences: ['pcmu', 'opus'],
+        // Pin the media edge. The default is 'roaming', which sometimes picks
+        // a far or overloaded region; the media path then fails to negotiate
+        // and the call answers, sits silent, and hangs up on its own. Ashburn
+        // is US-East and is the right edge for a Savannah operator.
+        edge: 'ashburn',
+        // Twilio fires tokenWillExpire ten seconds out by default, which is not
+        // enough room for a fetch to fail and be retried. Thirty seconds gives
+        // the refresh handler a second chance before the line goes dead
+        // mid-conversation.
+        tokenRefreshMs: 30000,
+        maxCallSignalingTimeoutMs: 10000,
+        // Distinguishes signalling failures that otherwise arrive as one
+        // undifferentiated error, which matters because our whole error story
+        // is telling the operator which specific thing is wrong.
+        enableImprovedSignalingErrorPrecision: true,
         // Warn before the tab is closed mid-call. The browser IS the phone here,
         // so a stray cmd-W hangs up on a seller with no undo.
         closeProtection: true,
