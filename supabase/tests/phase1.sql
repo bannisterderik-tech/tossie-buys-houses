@@ -81,8 +81,10 @@ EXCEPTION WHEN invalid_parameter_value THEN
 END $$;
 
 \echo '=== 6. board move writes the card and the activity row ==='
-INSERT INTO leads (team_id, name, phone, address, source, tcpa_opt_in)
-VALUES ('70551e00-0000-4000-8000-000000000001', 'Board Move', '9125553000', '3 Test St', 'website', true);
+-- tcpa_opt_in now requires a timestamp (leads_opt_in_needs_provenance): asserting
+-- consent without recording when it was given is not evidence of anything.
+INSERT INTO leads (team_id, name, phone, address, source, tcpa_opt_in, tcpa_opt_in_at)
+VALUES ('70551e00-0000-4000-8000-000000000001', 'Board Move', '9125553000', '3 Test St', 'website', true, now());
 
 BEGIN;
 SET LOCAL request.jwt.claim.sub = 'aaaaaaaa-0000-4000-8000-000000000001';

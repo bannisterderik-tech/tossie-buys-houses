@@ -7,6 +7,7 @@ const NAV = [
   { to: '/dialer', label: 'Dialer' },
   { to: '/messages', label: 'Messages' },
   { to: '/board', label: 'Board' },
+  { to: '/import', label: 'Import' },
   { to: '/settings/phone', label: 'Phone settings' },
 ];
 

@@ -1,0 +1,167 @@
+/* Communications on the lead detail panel: the thread, the call history and the
+   consent control.
+
+   A separate file rather than more of styles.css, and it stays that way: this is
+   the one screen in the product that is the product, so the surface that carries
+   "what has been said to this seller" is the thing most likely to be reworked.
+   Keeping it here means that work never has to touch the shell, the board or the
+   inbox to do it.
+
+   Every colour comes from the same variables styles.css uses — they are set on
+   :root at boot from data/business.json, so the palette still has exactly one
+   home. The three hard-coded reds (#a11b0f, #f5c4bd, #fdecea) are the app's
+   existing error palette, matched deliberately: a failed text has to look like
+   every other thing that went wrong, not like a fourth shade nobody recognises.
+*/
+
+/* ── the comms surface ────────────────────────────────────────────────────
+   Thread wide, calls narrow, mirroring .detail below it so the page reads as
+   one column of content with one rail of context rather than two competing
+   layouts. */
+.comms { display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: 18px; align-items: start; margin-bottom: 16px; }
+/* `.card + .card` stacks cards down a page; here they sit side by side, and the
+   inherited margin would drop the call history 16px below the thread. */
+.comms > .card + .card { margin-top: 0; }
+
+.msgcard { display: flex; flex-direction: column; min-width: 0; }
+.msgcard > h2 { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.msgcard > h2 .to { text-transform: none; letter-spacing: 0; font-weight: 700; color: var(--ink); }
+
+/* Height is capped rather than fixed: a lead with two texts should not leave a
+   half-empty box, and one with two hundred must not push the composer off the
+   screen. The composer is the thing that has to stay reachable. */
+.msgthread {
+  padding: 15px 17px; display: flex; flex-direction: column; gap: 10px;
+  max-height: 42vh; overflow-y: auto;
+}
+.msgthread .none { color: var(--muted); font-size: 0.87rem; margin: 0; }
+
+.msg { max-width: 76%; }
+.msg .text {
+  padding: 9px 13px; border-radius: 13px; font-size: 0.9rem;
+  white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.msg .meta { font-size: 0.72rem; color: var(--muted); margin-top: 3px; }
+
+.msg.in { align-self: flex-start; }
+.msg.in .text { background: var(--wash); border: 1px solid var(--line); border-bottom-left-radius: 4px; }
+
+.msg.out { align-self: flex-end; }
+.msg.out .text { background: var(--navy); color: #fff; border-bottom-right-radius: 4px; }
+.msg.out .meta { text-align: right; }
+
+/* A failed text that looks sent is the worst state this page can be in: the
+   operator believes the seller has the message, stops chasing, and the deal goes
+   quiet for a reason nobody ever finds. So a failure does not merely add a word
+   to the metadata line — the bubble stops being a sent message. It loses the
+   navy fill, gains the error border, and carries the reason underneath it. */
+.msg.dead .text {
+  background: #fdecea; color: #8c1a10; border: 1.5px solid #a11b0f;
+  border-bottom-right-radius: 4px;
+}
+.msg.dead .why {
+  display: block; margin-top: 4px; font-size: 0.79rem; font-weight: 700; color: #a11b0f;
+}
+
+/* The delivery state, always spelled out on outbound. 'queued' is not styled as
+   a problem — it is the normal first second of every message's life, and colour
+   there would train the operator to ignore the colour that matters. */
+.deliv {
+  display: inline-block; border-radius: 100px; padding: 0 7px;
+  font-size: 0.68rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em;
+  background: var(--wash); color: var(--muted); border: 1px solid var(--line);
+}
+.deliv.delivered { background: #e6f4ea; color: #0b6b34; border-color: #b7e0c4; }
+.deliv.failed { background: #a11b0f; color: #fff; border-color: #a11b0f; }
+
+.msgcomposer { border-top: 1px solid var(--line); padding: 13px 17px; margin-top: auto; }
+.msgcomposer .err { margin-bottom: 11px; }
+.msgcomposer .err .code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.8rem; opacity: 0.75;
+}
+.msgcomposer textarea:disabled { background: var(--wash); color: var(--muted); cursor: not-allowed; }
+.msgfoot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 9px; }
+.msgfoot .count { color: var(--muted); font-size: 0.8rem; }
+
+/* Why the box is dead, said before anything is typed. The refusal sentence under
+   the composer answers a send that was attempted; this answers the send that is
+   not worth attempting. */
+.msgwhy {
+  border-radius: 9px; padding: 10px 13px; margin-bottom: 11px; font-size: 0.85rem;
+  background: var(--wash); border: 1px solid var(--line); color: var(--ink);
+}
+.msgwhy strong { display: block; }
+
+/* ── call history ─────────────────────────────────────────────────────────── */
+.callrow { padding: 11px 17px; border-bottom: 1px solid var(--line); font-size: 0.87rem; }
+.callrow:last-child { border-bottom: 0; }
+.callrow .line { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.callrow .dir { font-weight: 700; }
+.callrow .sub { display: block; color: var(--muted); font-size: 0.79rem; margin-top: 2px; }
+.callrow audio { width: 100%; margin-top: 7px; height: 32px; }
+
+/* ── the call control ─────────────────────────────────────────────────────── */
+/* The one thing the operator opened this lead to do, so it is the first thing
+   under the heading and the largest control on the page. */
+.callbar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.callbar .num { font-size: 0.85rem; color: var(--muted); }
+
+/* ── recording consent ────────────────────────────────────────────────────
+   Deliberately not shaped like the two suppression controls it sits beside.
+
+   .stoprepair is red before anyone clicks it, because the fact it carries — a
+   person texted STOP — matters to an operator who has no intention of touching
+   it. This one carries no such fact. It is the ordinary, correct way to write
+   down something a seller actually said, and dressing it in warning colours
+   would either stop it being used or teach the operator that the red panel two
+   inches below it is also routine. Neither is survivable.
+
+   What it does get is the sentence about being a legal record, in normal weight,
+   above the field — because that is the part the operator needs before typing,
+   not after. */
+.consentbar {
+  margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line);
+  display: grid; gap: 4px;
+}
+
+.consentpanel {
+  margin-top: 14px; padding: 13px 15px; border-radius: 10px;
+  border: 1.5px solid var(--navy); background: var(--wash);
+}
+.consentpanel > strong { display: block; font-size: 0.93rem; }
+.consentpanel p.fine { margin: 6px 0 0; }
+
+.consentfield { display: block; margin-top: 12px; font-size: 0.82rem; font-weight: 600; color: var(--ink); }
+.consentfield select,
+.consentfield input {
+  display: block; width: 100%; margin-top: 5px;
+  padding: 8px 11px; border: 1.5px solid var(--line); border-radius: 8px;
+  font: inherit; font-size: 0.9rem; font-weight: 400; color: var(--ink); background: #fff;
+}
+.consentfield select:focus,
+.consentfield input:focus {
+  outline: 0; border-color: var(--navy); box-shadow: 0 0 0 3px rgba(26, 68, 133, 0.13);
+}
+.consentpanel .confirmbtns { margin-top: 13px; }
+
+/* Withdrawing is lighter than granting on purpose. Granting asserts a fact about
+   a conversation that has to hold up later; withdrawing only stops us. Stopping
+   should never be the harder of the two to do. */
+.consentheld {
+  margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line);
+  display: grid; gap: 4px;
+}
+.consentheld .held { font-size: 0.86rem; }
+
+@media (max-width: 1000px) {
+  /* The call history stops being a rail before the thread gets uncomfortably
+     narrow. 330px of context beside a 400px conversation is the wrong split. */
+  .comms { grid-template-columns: 1fr; }
+  .comms > .card + .card { margin-top: 16px; }
+}
+
+@media (max-width: 860px) {
+  .msgthread { max-height: 54vh; }
+  .msg { max-width: 88%; }
+  .callbar .btn.big { width: 100%; text-align: center; }
+}

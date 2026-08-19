@@ -1,0 +1,148 @@
+/*
+ * Styles for ImportPage only. A separate file rather than an addition to
+ * styles.css so this page can be built, moved or deleted without touching the
+ * stylesheet every other page shares. Vite bundles it from the import in
+ * ImportPage.jsx.
+ *
+ * Every class is prefixed `imp-`, for the same reason: nothing here can collide
+ * with a global rule, and a global rule cannot quietly restyle this page.
+ * Colours come from the brand custom properties main.jsx sets on :root — there
+ * are no hex values in here that are not a state colour with no token.
+ */
+
+/* ── the consent warning ──────────────────────────────────────────────────
+ * Deliberately the loudest thing on the page. This is the one screen in the
+ * product where a wrong assumption costs $500-$1,500 per contact, and the
+ * assumption it has to defeat is the natural one: that a list you paid for is
+ * a list you may call.
+ */
+.imp-warn {
+  border: 2px solid #f0b429;
+  background: #fef8e7;
+  border-radius: 9px;
+  padding: 15px 17px;
+  margin-bottom: 18px;
+}
+.imp-warn h2 {
+  margin: 0 0 6px;
+  font-size: 1rem;
+  color: #6b4c00;
+  letter-spacing: -0.01em;
+}
+.imp-warn p { margin: 0 0 7px; font-size: 0.88rem; color: #5a4100; line-height: 1.5; }
+.imp-warn p:last-child { margin-bottom: 0; }
+.imp-warn code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.83rem;
+  background: rgba(0, 0, 0, 0.06);
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
+/* ── steps ───────────────────────────────────────────────────────────────── */
+.imp-steps {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 16px;
+  font-size: 0.83rem;
+  color: var(--muted);
+  flex-wrap: wrap;
+}
+.imp-steps span { display: flex; align-items: center; gap: 8px; }
+.imp-steps span::after { content: '→'; color: var(--line); }
+.imp-steps span:last-child::after { content: ''; }
+.imp-steps b { font-weight: 700; color: var(--ink); }
+
+/* ── file picker ─────────────────────────────────────────────────────────── */
+.imp-drop {
+  border: 2px dashed var(--line);
+  border-radius: 9px;
+  padding: 40px 20px;
+  text-align: center;
+  background: #fff;
+}
+.imp-drop.over { border-color: var(--navy); background: var(--wash); }
+.imp-drop strong { display: block; font-size: 1rem; margin-bottom: 6px; }
+.imp-drop p { color: var(--muted); font-size: 0.88rem; margin: 0 0 14px; }
+.imp-drop input[type='file'] { display: none; }
+
+/* ── mapping ─────────────────────────────────────────────────────────────── */
+.imp-map { width: 100%; border-collapse: collapse; font-size: 0.87rem; }
+.imp-map th {
+  text-align: left;
+  padding: 9px 13px;
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 0.76rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.imp-map td { padding: 8px 13px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+.imp-map tr:last-child td { border-bottom: 0; }
+.imp-map .imp-head { font-weight: 700; color: var(--ink); }
+.imp-map .imp-sample {
+  color: var(--muted);
+  font-size: 0.82rem;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.imp-map select {
+  width: 100%;
+  max-width: 260px;
+  padding: 6px 8px;
+  border: 1.5px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  font: inherit;
+  font-size: 0.85rem;
+}
+.imp-map select:focus { outline: 0; border-color: var(--navy); box-shadow: 0 0 0 3px rgba(26, 68, 133, 0.13); }
+.imp-map select.imp-unmapped { color: var(--muted); }
+
+/* ── preview + tallies ───────────────────────────────────────────────────── */
+.imp-scroll { overflow-x: auto; }
+.imp-preview { width: 100%; border-collapse: collapse; font-size: 0.83rem; white-space: nowrap; }
+.imp-preview th {
+  text-align: left;
+  padding: 8px 11px;
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 0.74rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.imp-preview td { padding: 8px 11px; border-bottom: 1px solid var(--line); }
+.imp-preview tr:last-child td { border-bottom: 0; }
+.imp-preview td.imp-null { color: #bdbdbd; }
+.imp-preview tr.imp-skipped td { background: #fdf4f2; color: #8a5248; }
+
+.imp-tally { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 15px; }
+.imp-tile {
+  flex: 1 1 150px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 13px 15px;
+  background: #fff;
+}
+.imp-tile b { display: block; font-size: 1.5rem; letter-spacing: -0.02em; color: var(--ink); }
+.imp-tile span { font-size: 0.8rem; color: var(--muted); }
+.imp-tile.good b { color: #0b6b34; }
+.imp-tile.warn b { color: #a11b0f; }
+
+.imp-reasons { list-style: none; margin: 12px 0 0; padding: 0; font-size: 0.86rem; }
+.imp-reasons li { padding: 7px 0; border-top: 1px solid var(--line); display: flex; gap: 10px; }
+.imp-reasons li b { min-width: 56px; text-align: right; font-variant-numeric: tabular-nums; }
+.imp-reasons li span { color: var(--muted); }
+
+.imp-actions { display: flex; gap: 9px; align-items: center; flex-wrap: wrap; margin-top: 16px; }
+.imp-note { font-size: 0.83rem; color: var(--muted); }
+
+.imp-bar { height: 7px; background: var(--line); border-radius: 4px; overflow: hidden; margin: 12px 0; }
+.imp-bar > div { height: 100%; background: var(--navy); transition: width 0.2s; }
+
+@media (max-width: 720px) {
+  .imp-map .imp-sample { display: none; }
+}

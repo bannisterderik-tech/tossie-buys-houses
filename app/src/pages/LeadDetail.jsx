@@ -1,13 +1,16 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '../supabase.js';
 import { navigate } from '../router.js';
 import InlineField from '../components/InlineField.jsx';
 import DispositionBar from '../components/DispositionBar.jsx';
 import { callingWindow } from '../lib/calling-window.js';
+import { MAX_BODY, explainRefusal, refusalFrom } from '../lib/sms-refusals.js';
+import { TEAM_ID } from '../lib/team.js';
 import {
   STATUSES, TEMPERATURES, OCCUPANCY,
   titleize, formatPhone, fullAddress, fullDate, timeAgo,
 } from '../lib/format.js';
+import './lead-comms.css';
 
 const money = (v) => `$${Number(v).toLocaleString()}`;
 
@@ -36,18 +39,72 @@ const OPT_OUT_SOURCE = {
 };
 const optOutSource = (s) => OPT_OUT_SOURCE[s] || s || 'an unrecorded source';
 
+/**
+ * How consent was obtained, in the operator's words rather than the schema's.
+ *
+ * These four are the ways a wholesaler actually gets it, and they are presets
+ * rather than a free-text box because "how" is the field a plaintiff's attorney
+ * reads first, and "yes" typed into a box is not an answer. Free text is still
+ * available underneath — a real conversation will eventually not fit any of
+ * these — but it costs one extra choice, which is the right way round.
+ */
+const CONSENT_SOURCES = [
+  'Inbound call — they called us and agreed',
+  'Signed agreement',
+  'In person',
+  'Replied to our text',
+];
+
 export default function LeadDetail({ id }) {
   const [lead, setLead] = useState(null);
   const [activity, setActivity] = useState([]);
   const [notes, setNotes] = useState([]);
   const [optOuts, setOptOuts] = useState([]);
   const [restores, setRestores] = useState([]);
+  const [messages, setMessages] = useState([]);
+  const [calls, setCalls] = useState([]);
+  // The three things that decide whether texting is possible at all, none of
+  // which live on the lead. Read once per mount like MessagesPage does: buying a
+  // number or clearing A2P is a once-a-quarter event, and the send path refuses
+  // regardless of what this page believes.
+  const [settings, setSettings] = useState(null);
+  const [numbers, setNumbers] = useState([]);
+  const [teamKill, setTeamKill] = useState(false);
   const [draft, setDraft] = useState('');
   const [err, setErr] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  /**
+   * Just the thread and the call history.
+   *
+   * Separate from load() because realtime fires on every row: a seller's reply,
+   * every status callback on an outbound message, and the read receipts this
+   * page writes itself. Re-reading the lead, its notes, its activity and the
+   * telephony settings on each of those would be a dozen round trips to learn
+   * that one message changed from 'sent' to 'delivered'.
+   */
+  const loadComms = useCallback(async () => {
+    const [m, c] = await Promise.all([
+      // Oldest first, the way every phone shows a conversation. The composer is
+      // directly beneath the newest message rather than the oldest.
+      supabase.from('sms_messages').select('*').eq('lead_id', id).order('created_at', { ascending: true }),
+      supabase.from('call_log').select('*').eq('lead_id', id).order('created_at', { ascending: false }),
+    ]);
+
+    // A failed read must not render as an empty thread. "Nobody has texted this
+    // seller" and "we could not ask" look identical on screen and only one of
+    // them is safe to act on, so whatever is already there stays there.
+    const failed = m.error || c.error;
+    if (failed) {
+      setErr(`Could not load the conversation (${failed.message}). What is shown below may be out of date.`);
+      return;
+    }
+    setMessages(m.data ?? []);
+    setCalls(c.data ?? []);
+  }, [id]);
+
   const load = useCallback(async () => {
-    const [l, a, n, r] = await Promise.all([
+    const [l, a, n, r, s, p, t] = await Promise.all([
       // `dialable:lead_is_dialable` is the database function as a computed
       // column, the same way the dialer queue reads it. This page used to
       // re-derive the rule in JavaScript, and by the time telephony landed that
@@ -61,6 +118,14 @@ export default function LeadDetail({ id }) {
       // or not the lead is currently blocked, because the point of it is to be
       // visible long after the thing it records stopped having any effect.
       supabase.from('dnc_restore_log').select('*').eq('lead_id', id).order('restored_at', { ascending: false }),
+      supabase.from('telephony_settings').select('*').maybeSingle(),
+      // Live numbers only. This feeds the composer's "why is the box dead"
+      // line, which exists to describe the number twilio-send-sms will actually
+      // pick — and that function filters released numbers out, so a released one
+      // here would name a number the send would then refuse.
+      supabase.from('phone_numbers').select('*')
+        .is('released_at', null).order('is_primary', { ascending: false }),
+      supabase.from('teams').select('sms_send_disabled').eq('id', TEAM_ID).maybeSingle(),
     ]);
     if (l.error) setErr(l.error.message);
 
@@ -78,10 +143,85 @@ export default function LeadDetail({ id }) {
     setNotes(n.data ?? []);
     setRestores(r.data ?? []);
     setOptOuts(o.data ?? []);
+    // Surfaced rather than shrugged off. A failed read here silently produces
+    // the reassuring answer — no kill switch, no paused sending — and the
+    // composer would then either invite a message the server refuses or blame
+    // the wrong rail. The send path still enforces everything, so the cost is a
+    // wasted round trip and not a wrong text; the operator should still know the
+    // sentence under the composer is guessing.
+    const telephonyFailed = [s.error, p.error, t.error].find(Boolean);
+    if (telephonyFailed) {
+      setErr(`Could not read the telephony settings (${telephonyFailed.message}), so the reason given for texting being on or off may be wrong. The send path still enforces every rail.`);
+    }
+    setSettings(s.data ?? null);
+    setNumbers(p.data ?? []);
+    setTeamKill(Boolean(t.data?.sms_send_disabled));
     setLoading(false);
   }, [id]);
 
-  useEffect(() => { setLoading(true); load(); }, [load]);
+  useEffect(() => { setLoading(true); load(); loadComms(); }, [load, loadComms]);
+
+  /**
+   * The seller's reply, on screen while the operator is looking at the lead.
+   *
+   * The inbound webhook writes on the service role, so nothing else in this
+   * browser would ever hear about it — the thread would sit there looking
+   * finished. Filtered to this lead rather than the whole table because the
+   * operator has one lead open and the inbox page already subscribes to
+   * everything.
+   *
+   * The cleanup is not tidiness. Without removeChannel every lead opened in a
+   * session leaves a live socket subscription behind, and by the twentieth lead
+   * of the morning one inbound message is delivering twenty callbacks into
+   * components that no longer exist.
+   */
+  useEffect(() => {
+    const timer = { id: null };
+    // Realtime fires once per row, and a single send produces several: the
+    // queued insert, the Twilio SID update, then each delivery receipt. One
+    // trailing read lands the same state as five.
+    const bounce = () => {
+      clearTimeout(timer.id);
+      timer.id = setTimeout(loadComms, 250);
+    };
+
+    const channel = supabase
+      .channel(`lead-sms-${id}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'sms_messages', filter: `lead_id=eq.${id}` },
+        bounce,
+      )
+      .subscribe();
+
+    return () => {
+      clearTimeout(timer.id);
+      supabase.removeChannel(channel);
+    };
+  }, [id, loadComms]);
+
+  /**
+   * Opening the lead is the read receipt, the same as opening the thread in the
+   * inbox — otherwise an operator who works entirely from lead pages leaves the
+   * inbox permanently bold and stops trusting the count.
+   *
+   * `marked` is a ref rather than a re-read of `messages`, because the failure
+   * without it is a loop: if the UPDATE is refused, the rows come back unread,
+   * the effect runs again on the same ids, and the page hammers the API for as
+   * long as it is open.
+   */
+  const marked = useRef(new Set());
+  useEffect(() => { marked.current = new Set(); }, [id]);
+  useEffect(() => {
+    const ids = messages
+      .filter((m) => m.direction === 'inbound' && !m.read_at && !marked.current.has(m.id))
+      .map((m) => m.id);
+    if (ids.length === 0) return;
+
+    for (const one of ids) marked.current.add(one);
+    supabase.from('sms_messages').update({ read_at: new Date().toISOString() }).in('id', ids)
+      .then(({ error }) => { if (error) setErr(error.message); });
+  }, [messages]);
 
   const patch = useCallback(async (fields) => {
     setErr(null);
@@ -129,6 +269,54 @@ export default function LeadDetail({ id }) {
   const win = callingWindow(lead);
   const blocked = blockedWhy(lead, optOuts);
 
+  /**
+   * The number twilio-send-sms will pick, resolved the same way and in the same
+   * order it resolves it: pinned default, then primary, then whatever exists. A
+   * different order here would name one number in the composer and send from
+   * another.
+   */
+  const sender =
+    numbers.find((n) => n.id === settings?.default_number_id) ||
+    numbers.find((n) => n.is_primary) ||
+    numbers[0] || null;
+
+  /**
+   * The texting window, which is not quite the calling window.
+   *
+   * twilio-send-sms holds a number whose timezone could not be resolved to
+   * 11am–9pm Eastern rather than 8am–9pm, because the area-code table covers
+   * ~70 of NANP's 350+ codes and Eastern is the earliest US zone — so an
+   * unresolved guess is wrong in the dangerous direction every time. Mirrored
+   * here so the composer is not live for three hours in which every send is
+   * refused, which reads as a broken button rather than as a rail.
+   */
+  const textOpensAt = win.guessed ? 11 : 8;
+  const textingAllowed = win.hour !== null && win.hour >= textOpensAt && win.hour < 21;
+
+  /**
+   * Why the composer is dead, in the order twilio-send-sms refuses in, so the
+   * sentence on screen is the one the server would have sent back.
+   *
+   * None of this is enforcement — the function re-checks every rail with the
+   * service role and its refusal is what actually stops a message. This only
+   * saves the operator typing something that was never going to leave.
+   */
+  // The one blocked state with a fix on this page rather than somewhere else.
+  const consentGap = !consentVetoed(lead, optOuts) && noConsentBasis(lead);
+
+  const textBlocked =
+    !phone ? 'This lead has no phone number on file.'
+      : teamKill ? 'SMS is switched off for the team by the owner kill switch.'
+      : settings?.sms_send_paused ? 'SMS sending is paused in telephony settings.'
+      : !dialable ? `Not contactable — ${blocked}.${consentGap ? ' If the seller agreed to be contacted, record that on the compliance card below and this opens.' : ''}`
+      : !sender ? 'No number is connected to this team yet.'
+      : !sender.sms_enabled ? `${formatPhone(sender.e164)} is voice-only until A2P 10DLC is approved and SMS is switched on for it.`
+      : sender.a2p_status !== 'approved' ? `A2P 10DLC registration is ${(sender.a2p_status || 'not_started').replace(/_/g, ' ')}. Carriers reject unregistered traffic.`
+      : !textingAllowed ? (win.hour === null
+        ? 'The local time for this number could not be read, so texting is held rather than guessed at.'
+        : `It is ${win.localTime} there. Texting is only permitted ${textOpensAt}am–9pm in the seller's own local time${win.guessed ? ', and their zone could not be resolved — so the tighter Eastern window applies' : ''}.`)
+      : null;
+
   return (
     <>
       <header>
@@ -140,21 +328,6 @@ export default function LeadDetail({ id }) {
 
       <div className="toolbar">
         <button className="btn ghost" onClick={() => navigate('/')}>← All leads</button>
-        {phone && dialable && win.allowed && (
-          <a className="btn" href={`tel:${phone.replace(/[^\d+]/g, '')}`}>Call {formatPhone(phone)}</a>
-        )}
-        {phone && dialable && !win.allowed && (
-          <span className="badge warm" style={{ alignSelf: 'center' }}>
-            {win.reason === 'unknown_timezone'
-              ? 'Local time unknown — not callable'
-              : `${win.localTime} there — outside 8am–9pm`}
-          </span>
-        )}
-        {phone && !dialable && (
-          <span className="badge stop" style={{ alignSelf: 'center' }}>
-            Do not call — {blocked}
-          </span>
-        )}
         <select value={lead.status} onChange={(e) => patch({ status: e.target.value })}>
           {STATUSES.map((s) => <option key={s} value={s}>{titleize(s)}</option>)}
         </select>
@@ -163,11 +336,33 @@ export default function LeadDetail({ id }) {
         </select>
       </div>
 
-      <div className="card">
-        <h2>Log a call</h2>
-        <div className="body">
-          <DispositionBar leadId={id} onDone={load} />
-        </div>
+      <CallCard
+        leadId={id}
+        phone={phone}
+        dialable={dialable}
+        blocked={blocked}
+        win={win}
+        lead={lead}
+        onDone={load}
+      />
+
+      <div className="comms">
+        {/* Keyed by lead, and this is the one place it is not a nicety. Going
+            from one seller to the next re-uses this component (App.jsx renders
+            LeadDetail without a key), so a half-typed message would follow the
+            operator into the next thread and Send would text a stranger — the
+            one mistake on this page no server-side rail can catch, because that
+            send is perfectly legitimate, just to the wrong person. */}
+        <MessageThread
+          key={id}
+          leadId={id}
+          to={phone}
+          messages={messages}
+          cannotSend={textBlocked}
+          sender={sender}
+          onSent={loadComms}
+        />
+        <CallHistory calls={calls} />
       </div>
 
       <div className="detail">
@@ -279,6 +474,19 @@ export default function LeadDetail({ id }) {
                 </details>
               )}
 
+              {/* Recording what a seller agreed to, which is ordinary work and
+                  the only thing on this card that is. It sits above the two
+                  repair controls, not among them: those undo something that was
+                  written by mistake or by somebody else's decision, this writes
+                  down a fact. Its own gating is what keeps the distinction
+                  honest — a lead with a STOP on file is never offered it. */}
+              <ConsentControl
+                leadId={id}
+                lead={lead}
+                vetoed={consentVetoed(lead, optOuts)}
+                onDone={load}
+              />
+
               {/* The two corrections, and they are deliberately not siblings in
                   weight. Clearing the flag is data repair; clearing an opt-out
                   is a decision about somebody who told us to stop. Anything
@@ -348,10 +556,52 @@ function blockedWhy(lead, optOuts = []) {
   if (!lead.phone_mobile && !lead.phone) return 'No number';
   if (optOuts.length > 0) return 'Texted STOP';
   if (lead.trashed) return 'Trashed';
-  if (lead.source === 'website' && !lead.tcpa_opt_in) return 'No opt-in on file';
-  if (!lead.skip_traced) return 'Not skip traced';
-  if (!lead.dnc_scrubbed) return 'Not DNC scrubbed';
+  if (noConsentBasis(lead)) {
+    // Two ways to satisfy it and a lead may take either, so this names the
+    // shorter road rather than the first one that happens to be false. A lead
+    // already traced needs only the scrub; one with neither needs somebody to
+    // record what the seller actually agreed to, which is the control on the
+    // compliance card and not a piece of vendor work.
+    if (lead.skip_traced && !lead.dnc_scrubbed) return 'Not DNC scrubbed';
+    return 'No consent basis';
+  }
   return 'Suppressed';
+}
+
+/**
+ * Neither half of lead_is_dialable()'s consent test holds.
+ *
+ * This is the one piece of that function's logic the page has to be able to ask
+ * about on its own, because it decides whether to OFFER the fix — and the
+ * database answers "dialable: false" without saying which of six reasons it was.
+ * It mirrors 20260821120000_consent_basis_fix.sql exactly:
+ *
+ *   inbound  — tcpa_opt_in, however consent arrived
+ *   outbound — a cold-list lead that has been skip traced AND DNC scrubbed
+ *
+ * It deliberately does not look at `source`. That was the old rule, and it was
+ * wrong: a seller who agreed on the phone could never be contacted because the
+ * column happened to say 'manual'.
+ */
+function noConsentBasis(lead) {
+  return !lead.tcpa_opt_in && !(lead.skip_traced && lead.dnc_scrubbed);
+}
+
+/**
+ * Whether something OTHER than the missing consent is stopping this lead.
+ *
+ * Recording consent must never look like a way through a STOP. A
+ * telephony_opt_outs row, a DNC flag, a litigator hit or a wrong number is a
+ * different case with its own control on this card, and adding a consent record
+ * on top of one of them would change nothing except to leave a note claiming the
+ * seller agreed to be contacted — written after they asked us to stop.
+ */
+function consentVetoed(lead, optOuts = []) {
+  return Boolean(
+    lead.is_dnc || lead.is_litigator || lead.phone_invalid || lead.trashed
+    || optOuts.length > 0
+    || (!lead.phone && !lead.phone_mobile),
+  );
 }
 
 function Flag({ label, on, onChange }) {
@@ -360,6 +610,531 @@ function Flag({ label, on, onChange }) {
       <input type="checkbox" checked={Boolean(on)} onChange={(e) => onChange(e.target.checked)} />
       {label}
     </label>
+  );
+}
+
+/* ── calling ─────────────────────────────────────────────────────────────── */
+
+/**
+ * Call, then say what happened, in one place and in that order.
+ *
+ * It is the first thing under the heading and the largest control on the page
+ * because it is what the operator opened the lead to do. It used to be a
+ * medium-sized button in the toolbar between "All leads" and two dropdowns,
+ * which is the same visual weight as changing the temperature.
+ *
+ * The disposition bar is the second half of the same action, not a separate
+ * card further down: `tel:` hands the call to the operating system and the
+ * browser never hears how it went, so the outcome is only recorded if the
+ * operator taps it here when they hang up. Putting it anywhere else is what
+ * produces a lead with nine attempts and no idea what was said on any of them.
+ *
+ * Dialability is `lead_is_dialable()` read off the row — never re-derived — and
+ * the window is the same callingWindow() the dialer greys its button with.
+ */
+function CallCard({ leadId, lead, phone, dialable, blocked, win, onDone }) {
+  const callable = Boolean(phone) && dialable && win.allowed;
+
+  return (
+    <div className="card oncall">
+      <h2>Call</h2>
+      <div className="body">
+        <div className="callbar">
+          {callable ? (
+            /* Nothing is written when this is clicked, on purpose. The attempt
+               is counted by log_disposition below when the outcome is tapped,
+               and call_log rows come from Twilio's webhooks — never from a
+               browser that only knows a link was followed. */
+            <a className="btn big" href={`tel:${phone.replace(/[^\d+]/g, '')}`}>
+              Call {formatPhone(phone)}
+            </a>
+          ) : (
+            <span className="btn big stopped" aria-disabled="true">
+              {!phone ? 'No number on file'
+                : !dialable ? `Do not call — ${blocked}`
+                : 'Outside calling hours'}
+            </span>
+          )}
+          <span className="num">
+            {[
+              phone ? formatPhone(phone) : null,
+              win.localTime ? `${win.localTime} there` : null,
+              `${lead.call_attempts} attempt${lead.call_attempts === 1 ? '' : 's'}`,
+              lead.last_contacted_at ? `last contact ${timeAgo(lead.last_contacted_at)}` : 'never contacted',
+            ].filter(Boolean).join(' · ')}
+          </span>
+        </div>
+
+        {phone && !dialable && (
+          <div className="notice">
+            <strong>Not dialable: {blocked}.</strong>
+            The database refuses this lead on every contact path regardless of what this page shows.
+            The controls that can change that, where there are any, are on the compliance card below.
+          </div>
+        )}
+
+        {phone && dialable && !win.allowed && (
+          <div className="notice">
+            <strong>
+              {win.reason === 'unknown_timezone'
+                ? 'Cannot work out what time it is for this number.'
+                : `It is ${win.localTime} for this number — ${win.reason === 'before_8am' ? 'before 8am' : 'after 9pm'}.`}
+            </strong>
+            TCPA allows calls only between 8am and 9pm in the called party&rsquo;s local time, and the
+            damages are $500–$1,500 per call. This one waits.
+          </div>
+        )}
+
+        {callable && win.guessed && (
+          <div className="notice">
+            <strong>Time zone is a guess.</strong>
+            Neither the area code nor a state on this lead resolved, so {win.localTime} is Eastern by
+            default. Check before dialing near the edges of the window.
+          </div>
+        )}
+
+        {/* Keyed by lead because App.jsx renders <LeadDetail id={…}> without a
+            key: clicking through to another seller re-uses this component, and
+            an un-keyed bar would carry the last one's note and follow-up time
+            into the next disposition. */}
+        <DispositionBar key={leadId} leadId={leadId} onDone={onDone} />
+      </div>
+    </div>
+  );
+}
+
+/* ── the thread ──────────────────────────────────────────────────────────── */
+
+/**
+ * This lead's texts, and a box to answer them with.
+ *
+ * The same conversation is on the inbox page, and it stays there — that page is
+ * for triaging forty threads. This one is for working one seller, and until it
+ * existed the only way to answer a homeowner was to leave their record, find
+ * them in a list, and hope the right thread was still selected.
+ *
+ * It sends through twilio-send-sms and nowhere else. The browser cannot talk to
+ * Twilio (the auth token is an edge secret, and a VITE_ variable would publish
+ * it to every visitor of the marketing site), and more to the point every
+ * compliance rail lives inside that function. What is disabled here is a
+ * courtesy; the refusal is what actually stops a message.
+ */
+function MessageThread({ leadId, to, messages, cannotSend, sender, onSent }) {
+  const [draft, setDraft] = useState('');
+  const [sending, setSending] = useState(false);
+  const [refusal, setRefusal] = useState(null);
+  const [warning, setWarning] = useState(null);
+  const scroller = useRef(null);
+
+  // Newest at the bottom, the way every phone shows it — including when a reply
+  // arrives over realtime while the operator is reading.
+  useEffect(() => {
+    const el = scroller.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [messages.length]);
+
+  async function send(e) {
+    e.preventDefault();
+    const body = draft.trim();
+    if (!body || sending || cannotSend) return;
+
+    setSending(true);
+    setRefusal(null);
+    setWarning(null);
+
+    // The function owns the rails, the Twilio call and the sms_messages row.
+    // The browser hands it the three facts it cannot infer, spelled the way
+    // supabase/functions/twilio-send-sms reads them.
+    const { data, error } = await supabase.functions.invoke('twilio-send-sms', {
+      body: { lead_id: leadId, to, body },
+    });
+
+    if (error) {
+      setRefusal(await explainRefusal(error));
+    } else if (data?.ok === false || data?.sent === false) {
+      // Belt and braces: every refusal today is a non-2xx, so this branch is
+      // unreachable. It exists because the failure it guards against — a
+      // refusal answered with 200, read as success, draft cleared — looks
+      // exactly like a message that was sent.
+      setRefusal(refusalFrom(data, 'The send was refused and the server gave no reason.'));
+    } else {
+      setDraft('');
+      // The text is already at Twilio and cannot be un-sent, but its row still
+      // says "queued" with no SID. Say so, because the natural reaction to a
+      // message that never leaves "queued" is to send it again.
+      if (data?.warning) setWarning(`${data.warning} It did go out — do not send it again.`);
+    }
+
+    setSending(false);
+    onSent?.();
+  }
+
+  return (
+    <div className="card msgcard">
+      <h2>
+        <span>Messages · {messages.length}</span>
+        {to && <span className="to">{formatPhone(to)}</span>}
+      </h2>
+
+      <div className="msgthread" ref={scroller}>
+        {messages.length === 0 ? (
+          <p className="none">Nothing yet. A text sent here starts the thread; inbound replies land in it.</p>
+        ) : messages.map((m) => <Message key={m.id} m={m} />)}
+      </div>
+
+      <form className="msgcomposer" onSubmit={send}>
+        {warning && (
+          <div className="msgwhy">
+            <strong>Sent, but not fully recorded.</strong> {warning}
+          </div>
+        )}
+
+        {/* The specific reason, never "failed". Which one it is decides whether
+            the operator retries in an hour, fixes the lead, or must never text
+            this number again — and those three have very different price tags. */}
+        {refusal && (
+          <div className="err">
+            <strong>Not sent.</strong> {refusal.text}
+            {refusal.reason && <span className="code"> ({refusal.reason})</span>}
+          </div>
+        )}
+
+        {cannotSend && (
+          <div className="msgwhy">
+            <strong>Texting is not available on this lead.</strong>
+            {cannotSend}
+          </div>
+        )}
+
+        <textarea
+          className="note"
+          placeholder={cannotSend ? 'Sending is blocked — see above.' : 'Write to the seller…'}
+          value={draft}
+          maxLength={MAX_BODY}
+          disabled={Boolean(cannotSend)}
+          onChange={(e) => setDraft(e.target.value)}
+        />
+
+        <div className="msgfoot">
+          <span className="count">
+            {draft.length}/{MAX_BODY}
+            {sender ? ` · from ${formatPhone(sender.e164)}` : ''}
+          </span>
+          <button className="btn" type="submit" disabled={Boolean(cannotSend) || sending || !draft.trim()}>
+            {sending ? 'Sending…' : 'Send'}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+/**
+ * One message.
+ *
+ * Inbound sits left and neutral, outbound right and navy — the arrangement
+ * every phone uses, so which side of the conversation a sentence came from is
+ * read rather than worked out.
+ *
+ * A failed or undelivered outbound message stops looking like a sent one
+ * entirely. That is the whole point of this component: a text that failed but
+ * renders as navy on the right is a text the operator believes the seller has,
+ * so they stop chasing and the lead goes quiet for a reason nobody ever finds.
+ * The Twilio error code goes on screen with it, because that code is the
+ * difference between "resend it" and "the carrier will never take this".
+ */
+function Message({ m }) {
+  const failed = m.status === 'failed' || m.status === 'undelivered';
+  const inbound = m.direction === 'inbound';
+
+  return (
+    <div className={`msg ${inbound ? 'in' : 'out'}${failed ? ' dead' : ''}`}>
+      <div className="text">
+        {m.body}
+        {failed && (
+          <span className="why">
+            {m.status === 'failed' ? 'Failed — never sent' : 'Undelivered — the carrier rejected it'}
+            {m.error_code ? ` · Twilio ${m.error_code}` : ''}
+          </span>
+        )}
+      </div>
+      <div className="meta">
+        {fullDate(m.sent_at || m.created_at)}
+        {!inbound && <> · <span className={`deliv ${m.status}`}>{m.status}</span></>}
+        {!failed && m.error_code ? ` · Twilio ${m.error_code}` : ''}
+      </div>
+    </div>
+  );
+}
+
+/* ── what happened on the phone ──────────────────────────────────────────── */
+
+/** '95' -> '1m 35s'. Null durations are a call that never connected. */
+function duration(secs) {
+  if (secs === null || secs === undefined) return null;
+  if (secs < 60) return `${secs}s`;
+  return `${Math.floor(secs / 60)}m ${String(secs % 60).padStart(2, '0')}s`;
+}
+
+/**
+ * The calls, beside the texts rather than on a page of their own.
+ *
+ * "What happened with this seller" was three places — the timeline for
+ * dispositions, the inbox for texts, and nowhere at all for calls. One of those
+ * three is the reason an operator re-asks a homeowner a question they already
+ * answered, which is the fastest way to sound like the fourth wholesaler to
+ * call them this week.
+ */
+function CallHistory({ calls }) {
+  return (
+    <div className="card">
+      <h2>Calls · {calls.length}</h2>
+      {calls.length === 0 ? (
+        <div className="body">
+          <p className="fine" style={{ margin: 0 }}>
+            Nothing recorded. Call hands off to the operating system with <code>tel:</code>, which
+            cannot report back, so call_log fills in from Twilio&rsquo;s webhooks once the voice
+            function lands. Until then the dispositions above are the record of what happened.
+          </p>
+        </div>
+      ) : (
+        calls.map((c) => (
+          <div className="callrow" key={c.id}>
+            <div className="line">
+              <span className="dir">{c.direction === 'inbound' ? 'Inbound' : 'Outbound'}</span>
+              {c.status && <span className="badge">{titleize(c.status)}</span>}
+              {duration(c.duration_seconds) && <span>{duration(c.duration_seconds)}</span>}
+            </div>
+            <span className="sub">
+              {[
+                fullDate(c.started_at || c.created_at),
+                c.answered_by ? `answered by ${c.answered_by.replace(/_/g, ' ')}` : null,
+                c.disposition ? titleize(c.disposition) : null,
+              ].filter(Boolean).join(' · ')}
+            </span>
+            {/* preload="none" so opening a lead with a dozen calls on it does not
+                fetch a dozen recordings nobody asked to hear. */}
+            {c.recording_url && <audio controls preload="none" src={c.recording_url} />}
+          </div>
+        ))
+      )}
+    </div>
+  );
+}
+
+/* ── recording what the seller agreed to ─────────────────────────────────── */
+
+/**
+ * The control that was missing, and the reason texting was impossible.
+ *
+ * lead_is_dialable() needs a consent basis: either tcpa_opt_in, however consent
+ * arrived, or a cold-list lead that has been skip traced AND DNC scrubbed. There
+ * was no way to write the first one after a lead existed — the New Lead form had
+ * a checkbox and this page had nothing — so a seller who agreed on a call was
+ * permanently uncontactable, and the operator's only remaining options were to
+ * work around the app or to drop the lead.
+ *
+ * Three things it is not:
+ *
+ *   - It is not a way around a STOP. `vetoed` hides it whenever anything else is
+ *     blocking the lead — an opt-out, the DNC flag, a litigator hit, a wrong
+ *     number. Those are different cases with their own controls on this card,
+ *     and stacking a consent record on top of one would only leave a note
+ *     claiming the seller agreed, written after they asked us to stop.
+ *   - It is not a checkbox. record_lead_consent() rejects an empty source
+ *     because "how was this obtained" is the question that gets asked later, and
+ *     a bare boolean is not an answer to it.
+ *   - It is not reversible by deletion. Withdrawing consent stops us going
+ *     forward; it does not unmake the record that consent was once given, and
+ *     the RPC deliberately leaves the disclosure fields alone.
+ */
+function ConsentControl({ leadId, lead, vetoed, onDone }) {
+  if (lead.tcpa_opt_in === true) return <WithdrawConsent leadId={leadId} lead={lead} onDone={onDone} />;
+  if (vetoed || !noConsentBasis(lead)) return null;
+  return <RecordConsent leadId={leadId} onDone={onDone} />;
+}
+
+function RecordConsent({ leadId, onDone }) {
+  const [open, setOpen] = useState(false);
+  const [source, setSource] = useState('');
+  const [other, setOther] = useState('');
+  const [note, setNote] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+
+  const resolved = (source === '__other' ? other : source).trim();
+
+  function reset() {
+    setOpen(false);
+    setSource('');
+    setOther('');
+    setNote('');
+    setErr(null);
+  }
+
+  async function run() {
+    setBusy(true);
+    setErr(null);
+    const { error } = await supabase.rpc('record_lead_consent', {
+      p_lead_id: leadId,
+      p_source: resolved,
+      p_note: note.trim() || null,
+    });
+    setBusy(false);
+    if (error) { setErr(error.message); return; }
+    reset();
+    onDone?.();
+  }
+
+  if (!open) {
+    return (
+      <div className="consentbar">
+        <div>
+          <button className="btn ghost" onClick={() => setOpen(true)}>Record consent…</button>
+        </div>
+        <span className="fine">
+          There is no consent basis on this lead, which is why it cannot be called or texted. If the
+          seller agreed to be contacted, record how — it goes on the record with your name.
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="consentpanel">
+      <strong>Record consent to contact this seller</strong>
+      {/* Said before the field rather than under the button. An operator who is
+          about to assert something on Tossie's behalf should know it is an
+          assertion while they are deciding, not after they have made it. */}
+      <p className="fine">
+        <strong>This is a legal record.</strong> It is written with your name, timestamped, and shown
+        in this lead&rsquo;s timeline. It is the document that answers &ldquo;who said we could
+        contact them&rdquo; if that is ever asked, so record it only if the seller actually agreed.
+      </p>
+      <p className="fine">
+        It lifts nothing. A STOP, a do-not-call flag or a litigator hit is a separate matter with its
+        own control, and this would not be offered while one of them stood.
+      </p>
+
+      <label className="consentfield">
+        How was it obtained? Required — the RPC refuses an empty source.
+        <select value={source} onChange={(e) => setSource(e.target.value)}>
+          <option value="">Choose…</option>
+          {CONSENT_SOURCES.map((s) => <option key={s} value={s}>{s}</option>)}
+          <option value="__other">Something else — type it</option>
+        </select>
+      </label>
+
+      {source === '__other' && (
+        <label className="consentfield">
+          In your own words
+          <input
+            value={other}
+            onChange={(e) => setOther(e.target.value)}
+            placeholder="asked us to text him at the open house on the 12th"
+            autoComplete="off"
+            autoFocus
+          />
+        </label>
+      )}
+
+      <label className="consentfield">
+        Anything worth adding? Optional, kept with it.
+        <input
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          placeholder="said to use the mobile after 5"
+          autoComplete="off"
+        />
+      </label>
+
+      {err && <div className="err" style={{ marginTop: 11 }}>{err}</div>}
+
+      <div className="confirmbtns">
+        <button className="btn" onClick={run} disabled={!resolved || busy}>
+          {busy ? 'Recording…' : 'Record consent in my name'}
+        </button>
+        <button className="btn ghost" onClick={reset} disabled={busy}>Cancel</button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Deliberately lighter than granting it.
+ *
+ * Granting asserts a fact about a conversation that has to hold up later;
+ * withdrawing only stops us contacting somebody. Stopping must never be the
+ * harder of the two to do — so it is a link, one optional field, and no
+ * ceremony. The reason is optional because a seller saying "take me off your
+ * list" should not be held up by a form.
+ */
+function WithdrawConsent({ leadId, lead, onDone }) {
+  const [open, setOpen] = useState(false);
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+
+  async function run() {
+    setBusy(true);
+    setErr(null);
+    const { error } = await supabase.rpc('withdraw_lead_consent', {
+      p_lead_id: leadId,
+      p_reason: reason.trim() || null,
+    });
+    setBusy(false);
+    if (error) { setErr(error.message); return; }
+    setOpen(false);
+    setReason('');
+    onDone?.();
+  }
+
+  return (
+    <div className="consentheld">
+      <span className="held">
+        Consent on file{lead.tcpa_opt_in_at ? ` since ${fullDate(lead.tcpa_opt_in_at)}` : ''}
+        {lead.tcpa_disclosure_source ? ` — ${lead.tcpa_disclosure_source}` : ''}.
+      </span>
+
+      {!open ? (
+        <div>
+          <button className="linkbtn" onClick={() => setOpen(true)}>Withdraw consent…</button>
+        </div>
+      ) : (
+        <>
+          <span className="fine">
+            Calling and texting stop unless this lead has been skip traced and DNC scrubbed. What was
+            shown and when it was agreed to stays on the record — withdrawing consent going forward
+            does not unmake the fact that it was given.
+          </span>
+          <label className="consentfield">
+            Why? Optional.
+            <input
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="asked us to stop texting on the call"
+              autoComplete="off"
+              autoFocus
+            />
+          </label>
+
+          {err && <div className="err" style={{ marginTop: 11 }}>{err}</div>}
+
+          <div className="confirmbtns">
+            <button className="btn ghost" onClick={run} disabled={busy}>
+              {busy ? 'Withdrawing…' : 'Withdraw consent'}
+            </button>
+            <button
+              className="btn ghost"
+              onClick={() => { setOpen(false); setReason(''); setErr(null); }}
+              disabled={busy}
+            >
+              Cancel
+            </button>
+          </div>
+        </>
+      )}
+    </div>
   );
 }
 
