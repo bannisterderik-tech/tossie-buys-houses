@@ -348,6 +348,32 @@ p.fine { margin: 8px 0 0; }
   padding: 1px 5px; font-size: 0.85rem;
 }
 
+/* Sync from Twilio. Sits above the list because it is the way numbers are meant
+   to get there, and the manual "record a number" form is the fallback. */
+.syncbar { padding-top: 0; padding-bottom: 14px; }
+
+.syncreport {
+  border-top: 1px solid var(--line); border-bottom: 1px solid var(--line);
+  background: var(--wash);
+}
+.synclist { list-style: none; margin: 11px 0 0; padding: 0; }
+.synclist li { padding: 9px 0; border-top: 1px solid var(--line); }
+.synclist li:first-child { border-top: 0; }
+.synclist .line { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+.synclist .e164 { font-weight: 700; font-size: 0.93rem; }
+.synclist .fine { display: block; margin-top: 3px; }
+
+/* The one control on the phone page that writes to the Twilio account. Set off
+   with a rule and its own background so it reads as a different kind of thing
+   from the switches above it, which only ever change this database. */
+.hookrow {
+  margin-top: 13px; padding-top: 12px; border-top: 1px dashed var(--line);
+}
+.hookhead { display: flex; gap: 11px; align-items: flex-start; flex-wrap: wrap; }
+.hookhead .fine { flex: 1; min-width: 240px; }
+.hookurls { display: grid; gap: 3px; margin-top: 5px; font-size: 0.82rem; }
+.hookurls code { word-break: break-all; }
+
 /* ── dialer ───────────────────────────────────────────────────────────── */
 .oncall > .body { display: grid; gap: 15px; }
 .oncall-head { display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; }

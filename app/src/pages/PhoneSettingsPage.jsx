@@ -7,13 +7,23 @@ import { formatPhone, fullDate } from '../lib/format.js';
 /**
  * Phone and telephony settings — /settings/phone.
  *
- * This page reads and edits what the database knows about Tossie's numbers. It
- * does not talk to Twilio, and it does not pretend to: there is no Twilio
- * credential in the browser and there must never be one, because the auth token
- * signs API calls that can buy numbers and place calls on the account. Buying a
- * number, pointing its webhooks at us, and filing A2P registration all happen in
- * the Twilio console or in an edge function holding the secret. What lands here
- * is the record of what was done, and the switches the send and dial paths read.
+ * This page reads and edits what the database knows about Tossie's numbers.
+ * There is no Twilio credential in the browser and there must never be one,
+ * because the auth token signs API calls that can buy numbers and place calls
+ * on the account. Two buttons here do reach Twilio, and they reach it the only
+ * way the browser is allowed to: by invoking the `twilio-numbers` edge
+ * function, which holds the secret and does the talking.
+ *
+ *   Sync from Twilio        read-only. Pulls the account's numbers in so nobody
+ *                           has to type an E.164 or a SID by hand — the two
+ *                           values a typo makes silently wrong.
+ *   Point webhooks at this  writes to the Twilio account. Deliberately per
+ *   app                     number, deliberately not part of the sync, and
+ *                           deliberately labelled as changing something over
+ *                           there rather than here.
+ *
+ * Buying a number and filing A2P registration still happen in the Twilio
+ * console; nothing on this page does either.
  *
  * The A2P section gets more words than anything else on purpose. "Pending" is
  * the state that generates every "why aren't my texts sending" question, and the
@@ -84,6 +94,20 @@ function rejectionReason(fields) {
 const NOTHING_SAVED =
   'Nothing was saved — the row was not found or the change was refused, so the setting is unchanged from what is shown.';
 
+/**
+ * supabase-js raises FunctionsHttpError for any non-2xx and does not read the
+ * body, so the reason the edge function refused is sitting unread on the
+ * Response. Pulling it out is the difference between "Twilio sync failed" and
+ * "TWILIO_AUTH_TOKEN is not set on this function" — and the second one is the
+ * only version anybody can act on. The function goes to the trouble of naming
+ * the exact missing secret; throwing that away here would waste it.
+ */
+async function explainInvokeError(error, fallback) {
+  let payload = null;
+  try { payload = await error?.context?.json?.(); } catch { /* not JSON; fall through */ }
+  return payload?.message || payload?.error || error?.message || fallback;
+}
+
 export default function PhoneSettingsPage() {
   const [numbers, setNumbers] = useState([]);
   // Whether the last read came back. Empty state and "no such row" are honest
@@ -99,6 +123,13 @@ export default function PhoneSettingsPage() {
   // only one can be open at a time, so the key is the state rather than a flag
   // per control.
   const [confirming, setConfirming] = useState(null);
+  const [syncing, setSyncing] = useState(false);
+  // The per-number outcome of the last sync. Kept separate from `numbers`
+  // because it answers a different question: the list says what is on file now,
+  // this says what the sync did — and "unchanged" is the answer that stops
+  // somebody clicking again wondering whether it worked.
+  const [syncResult, setSyncResult] = useState(null);
+  const [syncErr, setSyncErr] = useState(null);
 
   const load = useCallback(async () => {
     const [n, s, t] = await Promise.all([
@@ -182,6 +213,33 @@ export default function PhoneSettingsPage() {
     }
   }
 
+  /**
+   * Read Twilio, write the database. Nothing in the Twilio account changes, and
+   * that is why this one is a plain button with no confirmation step: it is
+   * safe to press at any time, and making it feel dangerous would train the
+   * operator to hesitate over the wrong button.
+   */
+  const syncFromTwilio = useCallback(async () => {
+    setSyncing(true);
+    setSyncErr(null);
+    setSyncResult(null);
+    const { data, error } = await supabase.functions.invoke('twilio-numbers', {
+      body: { action: 'sync' },
+    });
+    if (error) {
+      setSyncErr(await explainInvokeError(error, 'The sync failed and the server gave no reason.'));
+    } else if (data?.ok === false) {
+      // Unreachable today — every refusal is a non-2xx — but a refusal answered
+      // with 200 and read as success would leave the operator believing their
+      // numbers are on file when none of them are.
+      setSyncErr(data.message || 'The sync was refused and the server gave no reason.');
+    } else {
+      setSyncResult(data);
+      await load();   // the rows the sync just wrote, read back from the database
+    }
+    setSyncing(false);
+  }, [load]);
+
   if (loading) return <div className="empty">Loading…</div>;
 
   return (
@@ -208,11 +266,26 @@ export default function PhoneSettingsPage() {
       <div className="card">
         <h2>Numbers</h2>
         <p className="cardnote">
-          What Twilio holds for this account. Nothing on this page reaches Twilio —
-          numbers are bought, configured and registered in the{' '}
-          <a href="https://console.twilio.com/" target="_blank" rel="noreferrer">Twilio console</a>,
-          and this is where the result gets recorded so the app knows about it.
+          What Twilio holds for this account. Numbers are bought and registered in the{' '}
+          <a href="https://console.twilio.com/" target="_blank" rel="noreferrer">Twilio console</a>;
+          the sync below is how the app finds out about them, so nobody has to
+          copy a number or a SID across by eye.
         </p>
+
+        <div className="body syncbar">
+          <button className="btn ghost" onClick={syncFromTwilio} disabled={syncing}>
+            {syncing ? 'Reading Twilio…' : 'Sync from Twilio'}
+          </button>
+          <p className="fine" style={{ marginTop: 6 }}>
+            Reads the account and updates this list. It changes nothing in Twilio,
+            and it never switches texting on — carrier capability is not A2P
+            approval, so a synced number arrives voice-only and stays that way
+            until someone turns texting on deliberately.
+          </p>
+        </div>
+
+        {syncErr && <div className="err" style={{ margin: '0 17px 14px' }}>{syncErr}</div>}
+        {syncResult && <SyncReport result={syncResult} />}
 
         {readFailed && numbers.length === 0 ? (
           <div className="empty">
@@ -522,8 +595,138 @@ function PhoneRow({ number: n, onPatch, onMakePrimary }) {
           placeholder="uses the team setting"
         />
         <dt>Twilio SID</dt>
-        <dd style={{ wordBreak: 'break-all', color: 'var(--muted)' }}>{n.twilio_sid || '—'}</dd>
+        <dd style={{ wordBreak: 'break-all', color: 'var(--muted)' }}>
+          {n.twilio_sid || <span>— <span className="fine">run a sync to fill this in</span></span>}
+        </dd>
       </dl>
+
+      <WebhookAction number={n} />
+    </div>
+  );
+}
+
+/* ── point one number's webhooks at this app ────────────────────────────── */
+
+/**
+ * The only control on this page that changes something in the Twilio account
+ * rather than in this database, which is the entire reason it is a separate,
+ * per-number, explicitly-labelled action instead of a step inside the sync.
+ * Sync is safe to press at any time; this rewrites live call and message
+ * routing, and if it points at the wrong place the person who finds out is a
+ * seller listening to silence. Two different risks should not share a button.
+ *
+ * State is local rather than lifted: each row's outcome belongs to that row,
+ * and a shared banner would make it ambiguous which number it was talking about
+ * on an account with several.
+ */
+function WebhookAction({ number: n }) {
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState(null);
+  const [err, setErr] = useState(null);
+
+  async function run() {
+    setBusy(true);
+    setErr(null);
+    setResult(null);
+    const { data, error } = await supabase.functions.invoke('twilio-numbers', {
+      body: { action: 'configure', number_id: n.id },
+    });
+    if (error) {
+      setErr(await explainInvokeError(error, 'Twilio was not updated and gave no reason.'));
+    } else if (data?.ok === false) {
+      setErr(data.message || 'Twilio was not updated and gave no reason.');
+    } else {
+      setResult(data);
+    }
+    setBusy(false);
+  }
+
+  return (
+    <div className="hookrow">
+      <div className="hookhead">
+        <button className="chip" onClick={run} disabled={busy}>
+          {busy ? 'Updating Twilio…' : 'Point webhooks at this app'}
+        </button>
+        <span className="fine">
+          Changes settings <strong>in the Twilio account</strong>, not here. Sets this
+          number's voice and message webhooks to this app so inbound calls and texts
+          reach it. Receiving texts needs no A2P approval — and it is what makes STOP
+          work — so this is safe to do while registration is still pending.
+        </span>
+      </div>
+
+      {err && <div className="err" style={{ marginTop: 10 }}>{err}</div>}
+
+      {result && (
+        // The URLs are read back from Twilio's own response, not echoed from what
+        // was sent, so what is printed here is what Twilio actually holds.
+        <div className={`banner ${result.matches_requested ? '' : 'warn'}`} style={{ marginTop: 10 }}>
+          <strong>
+            {result.matches_requested
+              ? 'Twilio updated.'
+              : 'Twilio saved something other than what was asked for.'}
+          </strong>
+          <div className="hookurls">
+            <span>Calls → <code>{result.voice_url || '—'}</code> ({result.voice_method || '—'})</span>
+            <span>Texts → <code>{result.sms_url || '—'}</code> ({result.sms_method || '—'})</span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── what the last sync did ─────────────────────────────────────────────── */
+
+/**
+ * Per number, not a count. "3 numbers synced" is the report that hides the one
+ * thing worth knowing — which number changed, and how — and the whole point of
+ * syncing rather than typing is that the values came from Twilio, so they are
+ * worth showing back. `unchanged` is listed as loudly as the rest: a re-sync
+ * that reports nothing at all looks like a sync that did not run.
+ */
+function SyncReport({ result }) {
+  const TONE = { added: 'ok', updated: 'ok', unchanged: 'cold', failed: 'stop' };
+  const { added = 0, updated = 0, unchanged = 0, failed = 0 } = result.counts ?? {};
+
+  return (
+    <div className="body syncreport">
+      <strong style={{ fontSize: '0.9rem' }}>
+        Read {result.twilio_count} number{result.twilio_count === 1 ? '' : 's'} from Twilio
+        {' · '}{added} added, {updated} updated, {unchanged} unchanged
+        {failed ? `, ${failed} failed` : ''}
+      </strong>
+
+      <ul className="synclist">
+        {(result.numbers ?? []).map((r) => (
+          <li key={r.e164}>
+            <div className="line">
+              <span className="e164">{formatPhone(r.e164)}</span>
+              <span className={`badge ${TONE[r.result] ?? 'cold'}`}>{r.result}</span>
+              {/* What Twilio says the line can carry. Shown because it is the
+                  fact nobody can look up from memory, and because seeing "sms"
+                  here next to texting still switched off is what prompts the
+                  question the note below answers. */}
+              <span className="fine">
+                {['voice', 'sms', 'mms'].filter((c) => r.capabilities?.[c]).join(' · ') || 'no capabilities reported'}
+              </span>
+            </div>
+            {r.message && <div className="fine">{r.message}</div>}
+            {r.changed?.length > 0 && (
+              <div className="fine">Updated: {r.changed.join(', ')}</div>
+            )}
+          </li>
+        ))}
+      </ul>
+
+      {result.not_in_twilio?.length > 0 && (
+        <p className="fine">
+          On file here but not returned by Twilio:{' '}
+          {result.not_in_twilio.map(formatPhone).join(', ')}. Left alone rather than
+          deleted — messages and calls reference these rows. The usual cause is a
+          number released in the console.
+        </p>
+      )}
     </div>
   );
 }
@@ -551,13 +754,17 @@ function NoNumbers({ onAdded }) {
         <li>
           <strong>Buy a number</strong> in the{' '}
           <a href="https://console.twilio.com/" target="_blank" rel="noreferrer">Twilio console</a>,
-          then record it below so the app knows it exists. Texting from it also
-          needs A2P 10DLC brand and campaign registration, which is filed in the
+          then press <strong>Sync from Twilio</strong> above so the app knows it
+          exists. Prefer the sync to typing it in below: it brings the SID and the
+          carrier capabilities with it, and those are the two fields a hand-entered
+          row gets wrong in a way nothing complains about. Texting from the number
+          also needs A2P 10DLC brand and campaign registration, which is filed in the
           same console and then waits on the carriers.
         </li>
         <li>
           <strong>Put the credentials in Supabase edge function secrets</strong> —
-          <code>TWILIO_ACCOUNT_SID</code> and <code>TWILIO_AUTH_TOKEN</code>. Secrets
+          <code>TWILIO_ACCOUNT_SID</code> and <code>TWILIO_AUTH_TOKEN</code>. The sync
+          button needs both, and it will say which one is missing by name. Secrets
           only: never a <code>VITE_</code> variable and never a database column. The
           anon key ships in the JavaScript every visitor downloads, so anything
           reachable from the browser is public, and that token can place calls and
@@ -639,7 +846,9 @@ function AddNumber({ onAdded, isFirst }) {
       <strong style={{ fontSize: '0.9rem' }}>Record a number you already own</strong>
       <p className="fine" style={{ marginTop: 4 }}>
         This writes down what Twilio already has. It does not buy the number,
-        verify it, or configure its webhooks.
+        verify it, or configure its webhooks. <strong>Sync from Twilio</strong> does
+        the same job without the typing and brings the SID with it; this is the
+        fallback for a number the sync did not return.
       </p>
       {err && <div className="err" style={{ marginTop: 10 }}>{err}</div>}
       <div className="fields" style={{ marginTop: 10 }}>
