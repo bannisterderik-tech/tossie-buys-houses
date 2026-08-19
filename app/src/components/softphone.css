@@ -1,0 +1,100 @@
+/* The browser softphone.
+
+   Its own file, imported from Softphone.jsx, for the same reason
+   property-links.css is: the control is dropped onto two pages already (the
+   dialer and the lead) and will land on a third when the multi-line dialer
+   arrives. Styles that live in one page's stylesheet are styles the component
+   silently loses the first time it is reused somewhere else.
+
+   Everything here builds on the app-wide .btn / .notice / .err rules in
+   styles.css rather than restating them, so a call control still looks like the
+   rest of the app. The palette is the brand custom properties main.jsx sets on
+   :root; the two literals are the greys already used for a disabled control in
+   styles.css, copied rather than reinvented so they cannot drift. */
+
+/* ── mid-call ──────────────────────────────────────────────────────────────
+   Wraps rather than shrinks. On a narrow window the alternative is a Hang up
+   button squeezed to two characters, and that is the one control on this page
+   that has to stay hittable. */
+.sp-live {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex-wrap: wrap;
+}
+
+/* What the phone is doing, in words, beside the buttons. Deliberately not a
+   badge: this is the line the operator glances at while talking, and it has to
+   read at a glance without decoding a colour. */
+.sp-live .sp-state {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 9px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+/* The timer. Tabular figures so the width does not jitter every second — a
+   number that shifts sideways once a second pulls the eye off the seller. */
+.sp-live .sp-state b {
+  font-variant-numeric: tabular-nums;
+  font-size: 1.02rem;
+  letter-spacing: 0.01em;
+  color: var(--navy);
+}
+
+/* Muted is a state the operator has to be able to see without clicking to find
+   out, because the failure mode is talking to nobody for thirty seconds. */
+.sp-mute.on {
+  background: var(--navy);
+  color: #fff;
+  border-color: var(--navy);
+}
+.sp-mute.on:hover { background: var(--navy); }
+
+/* ── the tel: fallback ─────────────────────────────────────────────────────
+   Rendered as a secondary button with a caption, never as the primary Call
+   button. A fallback that looks identical to the real thing is how a silent
+   downgrade happens, and the whole cost of this path is that it is invisible:
+   the call is not logged and the server never re-checks the rails. */
+.sp-fallback {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
+}
+.sp-fallback em {
+  font-style: normal;
+  font-size: 0.76rem;
+  color: var(--muted);
+  max-width: 30ch;
+  line-height: 1.35;
+}
+
+/* ── the sentences ─────────────────────────────────────────────────────────
+   .err in styles.css is sized for a one-line message; a refusal is a paragraph
+   with a headline, so it gets the same block treatment .notice already has.
+
+   Everything below is scoped to .sp-note / .sp-refusal rather than to .notice
+   and .err. Those two classes are used on a dozen screens, and a rule written
+   against them here would reach every one of them the moment any page imports
+   this file. */
+.sp-refusal strong { display: block; margin-bottom: 2px; }
+.sp-refusal { line-height: 1.5; }
+
+/* Dismiss / Try again. Small and last: they are the thing you do after reading,
+   not the thing you do instead of reading. */
+.sp-refusal .btn,
+.sp-note .btn {
+  display: block;
+  margin-top: 10px;
+  padding: 7px 13px;
+  font-size: 0.85rem;
+}
+
+/* Answer / Decline are a pair and belong side by side, which is the one place
+   the rule above needs undoing. */
+.sp-note .sp-actions { display: flex; gap: 8px; margin-top: 10px; }
+.sp-note .sp-actions .btn { margin-top: 0; }

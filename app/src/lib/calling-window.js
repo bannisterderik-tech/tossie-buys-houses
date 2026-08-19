@@ -6,18 +6,22 @@
  * squarely telemarketing. The called party's zone comes from their area code,
  * because that is the only piece of location the phone number itself carries.
  *
- * READ THIS BEFORE TRUSTING IT. `_shared/calling-window.ts` is the enforcing
- * copy, but today it is imported by exactly one caller — `twilio-send-sms`. No
- * voice edge function exists yet, and Call on the dialer is a `tel:` link the
- * browser hands to the operating system. So for CALLS this file is not the
- * advisory half of a pair, it is the only rail there is, and it greys out a
- * button an operator can still work around by dialing from their phone.
+ * THIS FILE IS THE ADVISORY COPY. `_shared/calling-window.ts` is the enforcing
+ * one, and it is now imported by both server-side send paths: `twilio-send-sms`
+ * for texts and `twilio-voice`'s `dial` action for calls. Every leg the
+ * softphone places is re-checked there, at dial time, with the service role.
  *
- * That is a known gap, not a design: it closes when the voice function lands
- * and the window is checked again at dial time, where a cron job, a webhook or
- * a redialed number can also see it. Until then, treat every entry in the table
- * below as load-bearing, and prefer over-blocking to under-blocking whenever an
- * area code straddles a zone boundary.
+ * What this file does is grey out a button before the operator commits to a
+ * lead. That still matters — a refusal after the microphone has opened is a
+ * worse experience than a button that was never live, and this is the copy that
+ * puts a readable local time on screen — but it is no longer the only thing
+ * standing between the queue and a 2am call.
+ *
+ * The one gap left is the labelled `tel:` fallback the dialer offers when the
+ * softphone cannot start at all. That call goes to the operating system and
+ * touches nothing of ours, so for it this file IS the only rail. Treat every
+ * entry in the table below as load-bearing, and prefer over-blocking to
+ * under-blocking whenever an area code straddles a zone boundary.
  *
  * The tables MUST stay in step with `_shared/phone-timezone.ts`. Two rails that
  * disagree about what time it is where the phone is ringing is worse than one,

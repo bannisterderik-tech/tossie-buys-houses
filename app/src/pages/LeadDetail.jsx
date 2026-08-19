@@ -5,6 +5,7 @@ import InlineField from '../components/InlineField.jsx';
 import PropertyLinks from '../components/PropertyLinks.jsx';
 import DispositionBar from '../components/DispositionBar.jsx';
 import { DeliveryChip, DeliveryFailure } from '../components/DeliveryState.jsx';
+import { SoftphoneControl, SoftphoneNotice, useSoftphone } from '../components/Softphone.jsx';
 import { callingWindow } from '../lib/calling-window.js';
 import { MAX_BODY, deliveryState, explainRefusal, refusalFrom } from '../lib/sms-refusals.js';
 import { TEAM_ID } from '../lib/team.js';
@@ -659,37 +660,42 @@ function Flag({ label, on, onChange }) {
  * which is the same visual weight as changing the temperature.
  *
  * The disposition bar is the second half of the same action, not a separate
- * card further down: `tel:` hands the call to the operating system and the
- * browser never hears how it went, so the outcome is only recorded if the
- * operator taps it here when they hang up. Putting it anywhere else is what
- * produces a lead with nine attempts and no idea what was said on any of them.
+ * card further down: Twilio's webhooks record that a call happened and how long
+ * it lasted, but nothing outside the operator's head knows what was SAID, so
+ * the outcome is only on the record if they tap it here when they hang up.
+ * Putting it anywhere else is what produces a lead with nine attempts and no
+ * idea what was said on any of them.
  *
- * Dialability is `lead_is_dialable()` read off the row — never re-derived — and
- * the window is the same callingWindow() the dialer greys its button with.
+ * Call goes through the same softphone the dialer uses, so it goes through
+ * `twilio-voice`'s `dial` action, which re-checks lead_is_dialable() and the
+ * called party's 8am–9pm window with the service role at the moment of the
+ * dial. The two checks below are unchanged and still worth having — dialability
+ * is `lead_is_dialable()` read off the row, never re-derived, and the window is
+ * the same callingWindow() the dialer greys its button with — but they are now
+ * a pre-filter rather than the only rail a call passes through.
  */
 function CallCard({ leadId, lead, phone, dialable, blocked, win, onDone }) {
   const callable = Boolean(phone) && dialable && win.allowed;
+  const sp = useSoftphone();
 
   return (
     <div className="card oncall">
       <h2>Call</h2>
       <div className="body">
         <div className="callbar">
-          {callable ? (
-            /* Nothing is written when this is clicked, on purpose. The attempt
-               is counted by log_disposition below when the outcome is tapped,
-               and call_log rows come from Twilio's webhooks — never from a
-               browser that only knows a link was followed. */
-            <a className="btn big" href={`tel:${phone.replace(/[^\d+]/g, '')}`}>
-              Call {formatPhone(phone)}
-            </a>
-          ) : (
-            <span className="btn big stopped" aria-disabled="true">
-              {!phone ? 'No number on file'
-                : !dialable ? `Do not call — ${blocked}`
-                : 'Outside calling hours'}
-            </span>
-          )}
+          {/* Nothing is written from here, on purpose. The attempt is counted by
+              log_disposition below when the outcome is tapped, and the call_log
+              row is written by `dial` before Twilio is called — never by a
+              browser, which only knows what it asked for. */}
+          <SoftphoneControl
+            sp={sp}
+            leadId={leadId}
+            number={phone}
+            blocked={callable ? null
+              : !phone ? 'No number on file'
+              : !dialable ? `Do not call — ${blocked}`
+              : 'Outside calling hours'}
+          />
           <span className="num">
             {[
               phone ? formatPhone(phone) : null,
@@ -699,6 +705,10 @@ function CallCard({ leadId, lead, phone, dialable, blocked, win, onDone }) {
             ].filter(Boolean).join(' · ')}
           </span>
         </div>
+
+        {/* First, above the standing conditions: a refusal that just happened
+            outranks one the operator has already read. */}
+        <SoftphoneNotice sp={sp} />
 
         {phone && !dialable && (
           <div className="notice">
@@ -931,9 +941,11 @@ function CallHistory({ calls }) {
       {calls.length === 0 ? (
         <div className="body">
           <p className="fine" style={{ margin: 0 }}>
-            Nothing recorded. Call hands off to the operating system with <code>tel:</code>, which
-            cannot report back, so call_log fills in from Twilio&rsquo;s webhooks once the voice
-            function lands. Until then the dispositions above are the record of what happened.
+            Nothing recorded. Calls placed with the softphone above appear here — the row is
+            written by <code>twilio-voice</code> before Twilio is called and filled in from its
+            webhooks afterwards. A call dialed on the desk phone, or through the labelled
+            fallback when the softphone cannot start, never reaches this list; for those the
+            dispositions above are the only record.
           </p>
         </div>
       ) : (

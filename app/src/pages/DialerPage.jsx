@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '../supabase.js';
 import { navigate } from '../router.js';
 import DispositionBar from '../components/DispositionBar.jsx';
+import { SoftphoneControl, SoftphoneNotice, useSoftphone } from '../components/Softphone.jsx';
 import { callingWindow } from '../lib/calling-window.js';
 import { formatPhone, fullAddress, titleize, timeAgo, fullDate } from '../lib/format.js';
 
@@ -17,22 +18,36 @@ const PEEK = 25;
  * Call, disposition, next. That loop is the page; everything else on it is
  * context for the one lead in front of you.
  *
- * What is deliberately not here is the browser softphone. Reoperative dials
- * through @twilio/voice-sdk into a Twilio conference per session
- * (`BrowserDialer.jsx`, `PowerDialer.jsx`), which needs an npm dependency this
- * app has not taken and Twilio credentials that do not exist yet. Until both
- * land, Call hands off to the operating system with `tel:` — a real way to
- * place the call today. The queue, its order, the compliance readout and the
- * disposition loop are where the value is, and none of them change when the
- * softphone arrives: at that point this one button starts a call leg instead of
- * opening the dialer app, and the rest of the page stays as it is.
+ * Call now places a WebRTC leg from this browser, through `twilio-voice`, into
+ * a Twilio conference the seller's leg is dialed into. Exactly one button
+ * changed what it does; the queue, its order, the compliance readout and the
+ * disposition loop below are untouched, because none of them ever depended on
+ * how the call was placed.
  *
- * The cost of `tel:` is that the calling-window check on this page is currently
- * the ONLY one a call passes through — there is no voice edge function to
- * re-check it at dial time the way `twilio-send-sms` re-checks it for texts.
- * That is why every surface that can start a call has to run the same check:
- * see the matching gate in LeadDetail. Dialability is different — that one is
- * `lead_is_dialable()` in the database, never re-derived here.
+ * WHICH GATES RUN WHERE, now that they no longer all run here.
+ *
+ * `twilio-voice`'s `dial` action is the only way this app can originate a call,
+ * and before it touches Twilio it re-asks both questions with the service role:
+ * `lead_is_dialable()` for every lead sharing the number, and 8am–9pm in the
+ * called party's local time (11am–9pm Eastern when the zone cannot be resolved,
+ * the same narrowing `twilio-send-sms` applies). A refusal is written to
+ * lead_activity as `call_blocked`, so it is on the seller's timeline rather than
+ * only in a toast the operator dismissed. That is the rail. It is the same shape
+ * of choke point texting has always had, and calling did not until now.
+ *
+ * What is on THIS page is a pre-filter, not the rail: the queue is built from
+ * `lead_is_dialable()`, the button is re-checked per lead against the database,
+ * and the window is evaluated on a timer. All of it exists so an operator is not
+ * offered a call the server is about to refuse — none of it is what stops the
+ * call. Keeping it is still worth it: a refusal after the mic opens is a worse
+ * experience than a greyed button, and the readout is how the operator learns
+ * which leads need compliance work.
+ *
+ * `tel:` survives in exactly one place: as a LABELLED fallback when the
+ * softphone could not START — no Twilio secrets set, no microphone, a browser
+ * without WebRTC. That call bypasses everything above, which is why it is
+ * captioned as such and never offered when the SERVER refused a dial. Falling
+ * back to `tel:` on a refusal would convert the rail into a speed bump.
  */
 export default function DialerPage() {
   const [rows, setRows] = useState([]);
@@ -50,6 +65,12 @@ export default function DialerPage() {
     const timer = setInterval(() => setNow(new Date()), 60_000);
     return () => clearInterval(timer);
   }, []);
+
+  // Held at the page rather than inside OnDeck so the Device survives the queue
+  // running dry and the operator rebuilding it. Registering costs a token fetch
+  // and a WebSocket handshake; doing that again between every two leads is how
+  // a dialer gets a two-second pause before each call.
+  const sp = useSoftphone();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -141,7 +162,7 @@ export default function DialerPage() {
       </div>
 
       {current ? (
-        <OnDeck lead={current} at={pos} of={queue.length} now={now} onSkip={advance} onDone={afterDisposition} />
+        <OnDeck lead={current} at={pos} of={queue.length} now={now} sp={sp} onSkip={advance} onDone={afterDisposition} />
       ) : (
         <div className="card">
           <div className="empty">
@@ -162,7 +183,7 @@ export default function DialerPage() {
 
 /* ── the one lead in front of you ────────────────────────────────────────── */
 
-function OnDeck({ lead, at, of, now, onSkip, onDone }) {
+function OnDeck({ lead, at, of, now, sp, onSkip, onDone }) {
   // The mobile first, matching lead_is_dialable()'s COALESCE(phone_mobile,
   // phone): it is the number a skip trace verified and the one that answers.
   const number = lead.phone_mobile || lead.phone;
@@ -175,10 +196,14 @@ function OnDeck({ lead, at, of, now, onSkip, onDone }) {
   // operator then works that list for an hour. In that hour a seller can text
   // STOP, the webhook writes telephony_opt_outs on the service role, and
   // nothing tells this page. telephony_opt_outs is not in the realtime
-  // publication, so there is no subscription to lean on — and because Call is a
-  // `tel:` link there is no server-side dial path left to catch it either. One
-  // round trip per lead, on a page that shows one lead at a time, is a cheap
-  // price for not calling somebody forty minutes after they opted out.
+  // publication, so there is no subscription to lean on.
+  //
+  // `dial` would now catch that STOP itself and refuse, so this check is no
+  // longer the only thing standing between the queue and a suppressed number.
+  // It stays anyway: a refusal arrives after the microphone has opened and the
+  // operator has committed to the lead, and one round trip per lead — on a page
+  // that shows one lead at a time — is a cheap price for a button that is
+  // honest before it is pressed rather than after.
   const [check, setCheck] = useState('checking');
   useEffect(() => {
     // `cancelled` because the operator can tap through leads faster than the
@@ -219,26 +244,28 @@ function OnDeck({ lead, at, of, now, onSkip, onDone }) {
               <p className="sub">{fullAddress(lead).replace(`${lead.address} · `, '') || 'No address on file'}</p>
             </div>
             <div className="oncall-actions">
-              {callable ? (
-                /* tel: hands off to whatever the machine dials with, and it
-                   cannot report back. Nothing is written here on purpose: the
-                   attempt is counted by log_disposition when the outcome is
-                   tapped below, and call_log rows come from Twilio's webhook,
-                   never from a browser that only knows a link was clicked. */
-                <a className="btn big" href={`tel:${number.replace(/[^\d+]/g, '')}`}>
-                  Call {formatPhone(number)}
-                </a>
-              ) : (
-                <span className="btn big stopped" aria-disabled="true">
-                  {check === 'checking' ? 'Checking…'
-                    : check === 'blocked' ? 'No longer dialable'
-                    : check === 'error' ? 'Cannot confirm'
-                    : 'Outside calling hours'}
-                </span>
-              )}
+              {/* Still nothing written here when the call starts. The attempt is
+                  counted by log_disposition when the outcome is tapped below,
+                  and the call_log row is written by `dial` before Twilio is
+                  called and filled in by Twilio's webhooks after — never by a
+                  browser, which only knows what it asked for. */}
+              <SoftphoneControl
+                sp={sp}
+                leadId={lead.id}
+                number={number}
+                blocked={callable ? null
+                  : check === 'checking' ? 'Checking…'
+                  : check === 'blocked' ? 'No longer dialable'
+                  : check === 'error' ? 'Cannot confirm'
+                  : 'Outside calling hours'}
+              />
               <button className="btn ghost" onClick={onSkip}>Skip</button>
             </div>
           </div>
+
+          {/* Above the compliance notices, because a refusal that just happened
+              outranks a standing condition the operator has already read. */}
+          <SoftphoneNotice sp={sp} />
 
           {check === 'blocked' && (
             <div className="notice">
