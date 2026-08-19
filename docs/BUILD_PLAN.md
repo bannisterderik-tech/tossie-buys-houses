@@ -834,8 +834,9 @@ service", "has been disconnected") were set `phone_invalid`.
 - Deal money (offer price/date, contract price, closing date, expected profit,
   assignment date), lot size, tax figures and the appointment date have no
   column on `leads`; they are summarised in `leads.notes` and preserved verbatim
-  in `raw_payload`. **20 leads carry complete contract data and no `deals` row
-  exists for them yet** -- that is the obvious next step.
+  in `raw_payload`. The 20 leads carrying complete contract data now have real
+  `deals` rows (8 under contract, 3 seller-terminated, 9 dead), derived from the
+  lead records rather than re-entered.
 - Buyer "Tags" in the export is overloaded: a bare number is this team's 1-5
   rating, anything else is property types. Mapped accordingly.
 - Buyers imported with `consent_sms = false` and `tcpa_opt_in = false`: no
