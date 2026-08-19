@@ -3,6 +3,7 @@ import { supabase } from '../supabase.js';
 import { navigate } from '../router.js';
 import InlineField from '../components/InlineField.jsx';
 import DispositionBar from '../components/DispositionBar.jsx';
+import { callingWindow } from '../lib/calling-window.js';
 import {
   STATUSES, TEMPERATURES, OCCUPANCY,
   titleize, formatPhone, fullAddress, fullDate, timeAgo,
@@ -20,7 +21,13 @@ export default function LeadDetail({ id }) {
 
   const load = useCallback(async () => {
     const [l, a, n] = await Promise.all([
-      supabase.from('leads').select('*').eq('id', id).single(),
+      // `dialable:lead_is_dialable` is the database function as a computed
+      // column, the same way the dialer queue reads it. This page used to
+      // re-derive the rule in JavaScript, and by the time telephony landed that
+      // copy was already wrong: it had no idea telephony_opt_outs existed, so a
+      // seller who had texted STOP still showed "Dialable: Yes" next to a live
+      // Call button. Any rule with two implementations has one that is stale.
+      supabase.from('leads').select('*, dialable:lead_is_dialable').eq('id', id).single(),
       supabase.from('lead_activity').select('*').eq('lead_id', id).order('created_at', { ascending: false }),
       supabase.from('lead_notes').select('*').eq('lead_id', id).order('created_at', { ascending: false }),
     ]);
@@ -63,10 +70,20 @@ export default function LeadDetail({ id }) {
   if (loading) return <div className="empty">Loading…</div>;
   if (!lead) return <div className="empty"><strong>Lead not found</strong><a href="/app">Back to leads</a></div>;
 
-  const phone = lead.phone || lead.phone_mobile;
-  const dialable =
-    !lead.is_dnc && !lead.is_litigator && !lead.phone_invalid && Boolean(phone) &&
-    ((lead.source === 'website' && lead.tcpa_opt_in) || (lead.skip_traced && lead.dnc_scrubbed));
+  // Mobile first, matching lead_is_dialable()'s COALESCE(phone_mobile, phone).
+  // Reading them the other way round meant the button dialed the landline on a
+  // lead whose skip trace had found a verified mobile.
+  const phone = lead.phone_mobile || lead.phone;
+  // `=== true` because an undefined column must not read as dialable. If the
+  // computed column ever stops arriving, this page refuses to offer a call
+  // rather than offering one it cannot justify.
+  const dialable = lead.dialable === true;
+  // The same window the dialer enforces. This page is one click from every
+  // blocked lead in the dialer ("Open the full lead"), so leaving the check off
+  // here made that block cosmetic — the operator just clicked through to a live
+  // Call button at 2am. `now` is not on a timer here because the detail page is
+  // read and acted on, not left open as a queue; the dialer owns that case.
+  const win = callingWindow(lead);
 
   return (
     <>
@@ -79,13 +96,19 @@ export default function LeadDetail({ id }) {
 
       <div className="toolbar">
         <button className="btn ghost" onClick={() => navigate('/')}>← All leads</button>
-        {phone && dialable && (
+        {phone && dialable && win.allowed && (
           <a className="btn" href={`tel:${phone.replace(/[^\d+]/g, '')}`}>Call {formatPhone(phone)}</a>
+        )}
+        {phone && dialable && !win.allowed && (
+          <span className="badge warm" style={{ alignSelf: 'center' }}>
+            {win.reason === 'unknown_timezone'
+              ? 'Local time unknown — not callable'
+              : `${win.localTime} there — outside 8am–9pm`}
+          </span>
         )}
         {phone && !dialable && (
           <span className="badge stop" style={{ alignSelf: 'center' }}>
-            Do not call — {lead.is_dnc ? 'on DNC' : lead.is_litigator ? 'known litigator'
-              : lead.phone_invalid ? 'wrong number' : 'not scrubbed'}
+            Do not call — {blockedWhy(lead)}
           </span>
         )}
         <select value={lead.status} onChange={(e) => patch({ status: e.target.value })}>
@@ -181,17 +204,17 @@ export default function LeadDetail({ id }) {
               <dl className="facts">
                 <dt>Dialable</dt>
                 <dd>
-                  {/* Mirrors lead_is_dialable(). The database is the enforcement
-                      point; this is only the readout. */}
-                  {dialable ? <span className="badge ok">Yes</span> : (
-                    <span className="badge stop">
-                      {lead.is_dnc ? 'On DNC'
-                        : lead.is_litigator ? 'Litigator'
-                        : lead.phone_invalid ? 'Wrong number'
-                        : !phone ? 'No number'
-                        : 'Not scrubbed'}
-                    </span>
-                  )}
+                  {/* The value is lead_is_dialable() itself, read off the row.
+                      blockedWhy() only names the answer — it does not decide
+                      it, which is why its vague last case is acceptable. */}
+                  {dialable
+                    ? <span className="badge ok">Yes</span>
+                    : <span className="badge stop">{blockedWhy(lead)}</span>}
+                </dd>
+                <dt>Local time there</dt>
+                <dd>
+                  {win.localTime || 'unknown'}
+                  {win.guessed && ' (guessed — no area code or state resolved)'}
                 </dd>
                 <dt>Attempts</dt><dd>{lead.call_attempts}</dd>
                 <dt>Last contact</dt><dd>{lead.last_contacted_at ? timeAgo(lead.last_contacted_at) : 'never'}</dd>
@@ -246,6 +269,28 @@ export default function LeadDetail({ id }) {
       </div>
     </>
   );
+}
+
+/**
+ * Why lead_is_dialable() said no, in the order the reasons matter: the two that
+ * are somebody's legal position first, then the ones that are unfinished work.
+ *
+ * This decides nothing — the database already did, and `dialable` is its answer
+ * verbatim. That is what makes the last case acceptable: this page does not
+ * load telephony_opt_outs, so it genuinely cannot tell a STOP apart from an
+ * unmet consent basis, and "Suppressed" is the honest word for both. The
+ * dialer's blocked list does load them and names it precisely.
+ */
+function blockedWhy(lead) {
+  if (lead.is_dnc) return 'On DNC';
+  if (lead.is_litigator) return 'Known litigator';
+  if (lead.phone_invalid) return 'Wrong number';
+  if (!lead.phone_mobile && !lead.phone) return 'No number';
+  if (lead.trashed) return 'Trashed';
+  if (lead.source === 'website' && !lead.tcpa_opt_in) return 'No opt-in on file';
+  if (!lead.skip_traced) return 'Not skip traced';
+  if (!lead.dnc_scrubbed) return 'Not DNC scrubbed';
+  return 'Suppressed';
 }
 
 function Flag({ label, on, onChange }) {

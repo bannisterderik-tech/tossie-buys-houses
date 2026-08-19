@@ -42,7 +42,18 @@ for f in supabase/migrations/*.sql; do
 done
 
 suites=("$@")
-[ ${#suites[@]} -eq 0 ] && suites=(phase0 phase1 phase2_auth)
+# Every suite in supabase/tests, in filename order, minus the auth stub that is
+# applied above rather than run as a suite. Discovered rather than listed: a
+# hand-maintained list silently stops covering the newest migration the moment
+# somebody forgets to add its suite, and a compliance suite nobody runs is worse
+# than no suite because it reads as coverage.
+if [ ${#suites[@]} -eq 0 ]; then
+  for f in supabase/tests/*.sql; do
+    b="$(basename "$f" .sql)"
+    [ "$b" = "00_auth_stub" ] && continue
+    suites+=("$b")
+  done
+fi
 
 fail=0
 for s in "${suites[@]}"; do

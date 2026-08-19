@@ -8,6 +8,9 @@ import LeadDetail from './pages/LeadDetail.jsx';
 import BoardPage from './pages/BoardPage.jsx';
 import NewLeadPage from './pages/NewLeadPage.jsx';
 import TodayPage from './pages/TodayPage.jsx';
+import DialerPage from './pages/DialerPage.jsx';
+import MessagesPage from './pages/MessagesPage.jsx';
+import PhoneSettingsPage from './pages/PhoneSettingsPage.jsx';
 
 export default function App() {
   const [session, setSession] = useState(null);
@@ -39,7 +42,10 @@ export default function App() {
       {path === '/leads/new' ? <NewLeadPage />
         : leadId ? <LeadDetail id={leadId} />
         : path === '/today' ? <TodayPage />
+        : path === '/dialer' ? <DialerPage />
+        : path === '/messages' ? <MessagesPage />
         : path === '/board' ? <BoardPage />
+        : path === '/settings/phone' ? <PhoneSettingsPage />
         : path === '/' ? <LeadsPage />
         : <NotFound path={path} />}
     </Layout>

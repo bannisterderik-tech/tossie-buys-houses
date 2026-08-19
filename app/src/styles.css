@@ -220,6 +220,166 @@ textarea.note:focus { outline: 0; border-color: var(--navy); box-shadow: 0 0 0 3
 .sidebar .newlead { margin-top: 14px; text-align: center; font-size: 0.88rem; padding: 9px; }
 .sidebar .newlead:hover { text-decoration: none; color: #fff; }
 
+/* ── messages ─────────────────────────────────────────────────────────── */
+/* Thread list beside one conversation. Both panes own their scrolling and the
+   page itself does not, so the composer stays put while a long thread moves. */
+.msgs { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 16px; align-items: start; }
+/* `.card + .card` stacks cards down a page; here they sit side by side, and the
+   inherited margin drops the conversation 16px below its own thread list. */
+.msgs > .card + .card { margin-top: 0; }
+
+.threadlist { overflow: hidden; }
+.threadlist ul { list-style: none; margin: 0; padding: 0; max-height: 62vh; overflow-y: auto; }
+.threadsearch { padding: 11px; border-bottom: 1px solid var(--line); }
+.threadsearch input {
+  width: 100%; padding: 8px 11px; border: 1.5px solid var(--line);
+  border-radius: 8px; font: inherit; font-size: 0.88rem; color: var(--ink);
+}
+.threadsearch input:focus { outline: 0; border-color: var(--navy); box-shadow: 0 0 0 3px rgba(26,68,133,0.13); }
+
+.threadrow { padding: 11px 14px; border-bottom: 1px solid var(--line); cursor: pointer; }
+.threadrow:last-child { border-bottom: 0; }
+.threadrow:hover { background: var(--wash); }
+.threadrow.on { background: #eef3fb; box-shadow: inset 3px 0 0 var(--navy); }
+.threadrow .who { display: flex; align-items: center; gap: 7px; font-size: 0.89rem; }
+.threadrow .who span:first-child { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.threadrow .preview {
+  color: var(--muted); font-size: 0.82rem; margin-top: 2px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.threadrow .preview .dir { color: #9aa7bb; }
+.threadrow .when { color: var(--muted); font-size: 0.75rem; margin-top: 3px; }
+/* Unread is carried by weight, not colour — a seller reply has to be findable
+   in a list of forty at a glance. */
+.threadrow.unread .who { font-weight: 800; }
+.threadrow.unread .preview { color: var(--ink); font-weight: 600; }
+.threadrow .dot {
+  background: var(--coral); color: #fff; border-radius: 100px; font-size: 0.7rem;
+  font-weight: 800; padding: 1px 7px; flex-shrink: 0;
+}
+
+.thread { display: flex; flex-direction: column; }
+.thread .threadhead {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+  font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.07em;
+  color: var(--muted); margin: 0; padding: 13px 17px; border-bottom: 1px solid var(--line);
+}
+.thread .threadhead a { font-weight: 700; }
+
+.bubbles { padding: 16px 17px; display: flex; flex-direction: column; gap: 10px; height: 46vh; overflow-y: auto; }
+.bubble { max-width: 74%; }
+.bubble .text {
+  padding: 9px 13px; border-radius: 13px; font-size: 0.9rem;
+  white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.bubble .meta { font-size: 0.72rem; color: var(--muted); margin-top: 3px; }
+.bubble.in { align-self: flex-start; }
+.bubble.in .text { background: var(--wash); border: 1px solid var(--line); border-bottom-left-radius: 4px; }
+.bubble.out { align-self: flex-end; }
+.bubble.out .text { background: var(--navy); color: #fff; border-bottom-right-radius: 4px; }
+.bubble.out .meta { text-align: right; }
+
+.composer { border-top: 1px solid var(--line); padding: 13px 17px; }
+.composer .err { margin-bottom: 11px; }
+.composer .err .code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.8rem; opacity: 0.75; }
+.composer textarea:disabled { background: var(--wash); color: var(--muted); cursor: not-allowed; }
+.composerfoot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 9px; }
+
+.banner {
+  border-radius: 9px; padding: 12px 15px; font-size: 0.87rem; margin-bottom: 15px;
+  border: 1px solid var(--line); background: var(--wash); color: var(--body);
+}
+.banner strong { display: block; margin-bottom: 2px; color: var(--ink); }
+.banner.warn { background: #fef8e8; border-color: #f0dda6; color: #6b5100; }
+.banner.warn strong { color: #6b5100; }
+.banner.stop { background: #fdecea; border-color: #f5c4bd; color: #8c1a10; }
+.banner.stop strong { color: #8c1a10; }
+
+/* ── phone settings ───────────────────────────────────────────────────── */
+/* Small print that is genuinely worth reading — the compliance sentences and
+   the "this does not reach Twilio" caveats. Muted, but not hidden. */
+.fine { font-size: 0.81rem; color: var(--muted); }
+p.fine { margin: 8px 0 0; }
+
+.phonerow { padding: 15px 17px; border-bottom: 1px solid var(--line); }
+.phonerow:last-child { border-bottom: 0; }
+.phonehead { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.phonehead .e164 { font-size: 1.05rem; font-weight: 800; letter-spacing: -0.01em; }
+.phonehead .nick { color: var(--muted); font-size: 0.87rem; }
+.phonehead .spacer { flex: 1; }
+
+/* A2P state. `wait` is amber rather than red on purpose: pending is a carrier
+   queue, not a failure, and colouring it like an error is what makes people
+   think something is broken and go looking for a fix that does not exist. */
+.a2p {
+  border: 1px solid var(--line); border-radius: 9px;
+  padding: 11px 13px; margin: 12px 0; background: var(--wash);
+}
+.a2p .head { font-weight: 700; font-size: 0.86rem; }
+.a2p p { margin: 6px 0 0; font-size: 0.86rem; color: var(--body); }
+.a2p.wait { background: #fef4e0; border-color: #f5dfa8; }
+.a2p.wait .head { color: #8a6100; }
+.a2p.ok   { background: #e6f4ea; border-color: #b7e0c4; }
+.a2p.ok .head { color: #0b6b34; }
+.a2p.stop { background: #fdecea; border-color: #f5c4bd; }
+.a2p.stop .head { color: #a11b0f; }
+
+.toggles { display: flex; gap: 18px; flex-wrap: wrap; align-items: center; margin: 0 0 13px; }
+.toggles label { display: flex; align-items: center; gap: 7px; font-size: 0.88rem; font-weight: 600; cursor: pointer; }
+.toggles label.off { color: var(--muted); font-weight: 400; }
+.toggles .why { font-size: 0.81rem; color: var(--muted); }
+
+/* The kill-switch confirm. Deliberately loud and deliberately in place rather
+   than a browser confirm(), which cannot carry the sentence explaining what
+   the switch does — and that sentence is the whole point of the step. */
+.confirm {
+  border: 1.5px solid var(--coral); background: #fdece9;
+  border-radius: 10px; padding: 13px 15px; margin-top: 13px;
+}
+.confirm strong { display: block; font-size: 0.93rem; }
+.confirm p { margin: 6px 0 12px; font-size: 0.86rem; color: var(--body); }
+.confirmbtns { display: flex; gap: 9px; flex-wrap: wrap; }
+
+.steps { margin: 0; padding-left: 20px; font-size: 0.9rem; }
+.steps li { margin-bottom: 11px; }
+.steps li:last-child { margin-bottom: 0; }
+.steps code {
+  background: var(--wash); border: 1px solid var(--line); border-radius: 5px;
+  padding: 1px 5px; font-size: 0.85rem;
+}
+
+/* ── dialer ───────────────────────────────────────────────────────────── */
+.oncall > .body { display: grid; gap: 15px; }
+.oncall-head { display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; }
+.oncall-head h3 { margin: 0; font-size: 1.2rem; letter-spacing: -0.02em; }
+.oncall-head .sub { margin: 3px 0 0; color: var(--muted); font-size: 0.88rem; }
+.oncall-actions { margin-left: auto; display: flex; gap: 9px; align-items: center; }
+
+/* The call action is the largest thing on the page because it is the only
+   thing the operator came here to do. */
+.btn.big { padding: 14px 24px; font-size: 1.02rem; border-radius: 10px; }
+.btn.big:hover { text-decoration: none; }
+/* Outside the calling window it reads as a sign, not as a button that someone
+   might still get away with clicking. */
+.btn.big.stopped, .btn.big.stopped:hover { background: #f1f2f4; color: #7c8798; cursor: not-allowed; }
+
+.notice {
+  background: #fef4e0; border: 1px solid #f5dfa8; color: #6d4c00;
+  padding: 11px 14px; border-radius: 9px; font-size: 0.86rem;
+}
+.notice strong { display: block; margin-bottom: 2px; }
+
+.oncall-facts {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(132px, 1fr)); gap: 14px;
+  border-top: 1px solid var(--line); padding-top: 15px;
+}
+.oncall-facts .k {
+  display: block; font-size: 0.71rem; text-transform: uppercase; letter-spacing: 0.07em;
+  color: var(--muted); font-weight: 700;
+}
+.oncall-facts .v { display: block; font-size: 0.94rem; margin-top: 2px; }
+.oncall-why { margin: 0; font-size: 0.9rem; color: var(--body); }
+
 /* ── auth ─────────────────────────────────────────────────────────────── */
 .authwrap { min-height: 100vh; display: grid; place-items: center; background: var(--navy-ink); padding: 20px; }
 .authcard { background: #fff; border-radius: 14px; padding: 30px; width: 100%; max-width: 380px; box-shadow: 0 22px 60px rgba(0,0,0,0.34); }
@@ -258,8 +418,27 @@ textarea.note:focus { outline: 0; border-color: var(--navy); box-shadow: 0 0 0 3
   table.leads .hide-sm { display: none; }
   .fields { grid-template-columns: 1fr 1fr; }
   .sidebar .newlead { margin-top: 0; margin-left: auto; }
+  /* One column: the thread list becomes a short index above the conversation
+     rather than a sidebar that eats half a phone screen. */
+  .msgs { grid-template-columns: 1fr; }
+  .threadlist ul { max-height: 34vh; }
+  .bubbles { height: auto; max-height: 56vh; }
+  .bubble { max-width: 88%; }
 }
 
 @media (max-width: 520px) {
   .fields { grid-template-columns: 1fr; }
+}
+
+/* Nav items for phases not yet built. Explicitly marked rather than styled to
+   look like links — an item that looks clickable and does nothing reads as a
+   bug, which is exactly how the earlier placeholders came across. */
+.sidebar nav .navsoon {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 9px 11px; font-size: 0.92rem; color: #5c6f8e; font-weight: 600;
+  cursor: default;
+}
+.sidebar nav .navsoon em {
+  font-style: normal; font-size: 0.66rem; text-transform: uppercase;
+  letter-spacing: 0.08em; opacity: 0.75;
 }
