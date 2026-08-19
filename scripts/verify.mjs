@@ -16,7 +16,13 @@ const files = [];
 (function walk(d) {
   for (const e of fs.readdirSync(d, { withFileTypes: true })) {
     const p = path.join(d, e.name);
-    if (e.isDirectory()) walk(p);
+    // site/app is the operator console's SPA shell, not a marketing page. It is
+    // noindex, robots-disallowed and behind auth, so a missing meta description
+    // and no JSON-LD are correct there rather than defects — and it lands in
+    // site/ only because Vite builds into it. Without this the audit's result
+    // depended on whether the app had been rebuilt since gen/build.mjs last
+    // wiped site/, which made a clean run a matter of luck.
+    if (e.isDirectory()) { if (p !== path.join(SITE, 'app')) walk(p); }
     else if (e.name === 'index.html') files.push(p);
   }
 })(SITE);
