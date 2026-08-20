@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../supabase.js';
 import { navigate } from '../router.js';
+import useBulkSelect from '../lib/useBulkSelect.js';
+import BulkBar from '../components/BulkBar.jsx';
 import { TEAM_ID } from '../lib/team.js';
 import { titleize, formatPhone, dateOnly } from '../lib/format.js';
 import {
@@ -154,6 +156,8 @@ export default function BuyersPage() {
   // as an audience size, and the one direction it must never be wrong in is up.
   const textable = shown.filter((b) => textingBlock(b) === null).length;
 
+  const sel = useBulkSelect(shown);
+
   if (loading) return <div className="empty">Loading buyers…</div>;
 
   return (
@@ -210,6 +214,9 @@ export default function BuyersPage() {
       {adding && <AddBuyer onCancel={() => setAdding(false)} />}
 
       <div className="card">
+        {/* No onDone: the buyers realtime channel above reloads on any UPDATE
+            to the table, and a trash is exactly that. */}
+        <BulkBar table="buyers" sel={sel} onError={setErr} />
         {shown.length === 0 ? (
           <div className="empty">
             <strong>{buyers.length ? 'Nothing matches those filters' : 'No buyers yet'}</strong>
@@ -220,6 +227,14 @@ export default function BuyersPage() {
           <table className="leads">
             <thead>
               <tr>
+                <th className="pick">
+                  <input
+                    type="checkbox"
+                    aria-label={sel.allSelected ? 'Deselect all' : 'Select all'}
+                    checked={sel.allSelected}
+                    onChange={(e) => sel.toggleAll(e.target.checked)}
+                  />
+                </th>
                 <th>Buyer</th>
                 <th>Buy box</th>
                 <th>Track record</th>
@@ -228,7 +243,7 @@ export default function BuyersPage() {
               </tr>
             </thead>
             <tbody>
-              {shown.map((b) => <BuyerRow key={b.id} buyer={b} />)}
+              {shown.map((b) => <BuyerRow key={b.id} buyer={b} sel={sel} />)}
             </tbody>
           </table>
         )}
@@ -271,13 +286,26 @@ function cmpDateDesc(a, b) {
   return new Date(b) - new Date(a);
 }
 
-function BuyerRow({ buyer }) {
+function BuyerRow({ buyer, sel }) {
   const block = textingBlock(buyer);
   const where = geography(buyer);
   const box = buyBoxLine(buyer);
 
   return (
-    <tr onClick={() => navigate(`/buyers/${buyer.id}`)} style={{ cursor: 'pointer' }}>
+    <tr
+      onClick={() => navigate(`/buyers/${buyer.id}`)}
+      style={{ cursor: 'pointer' }}
+      className={sel.isSelected(buyer.id) ? 'picked' : undefined}
+    >
+      {/* stopPropagation, or ticking the box opens the buyer */}
+      <td className="pick" onClick={(e) => e.stopPropagation()}>
+        <input
+          type="checkbox"
+          aria-label={`Select ${buyer.name}`}
+          checked={sel.isSelected(buyer.id)}
+          onChange={(e) => sel.toggle(buyer.id, e.target.checked)}
+        />
+      </td>
       <td>
         <span className="addr">{buyer.name}</span>
         <span className="sub">

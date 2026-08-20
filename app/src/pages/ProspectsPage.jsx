@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '../supabase.js';
 import { navigate } from '../router.js';
+import useBulkSelect from '../lib/useBulkSelect.js';
+import BulkBar from '../components/BulkBar.jsx';
 import { formatPhone, timeAgo, titleize } from '../lib/format.js';
 import './prospects.css';
 
@@ -171,6 +173,7 @@ export default function ProspectsPage() {
     const { data, error } = await supabase
       .from('prospect_lists')
       .select('*')
+      .eq('trashed', false)
       .order('created_at', { ascending: false });
     setListsReady(true);
     if (error) { setListsErr(`Could not load the cold lists (${error.message}).`); return; }
@@ -295,6 +298,8 @@ export default function ProspectsPage() {
 
   const callableInView = useMemo(() => rows.filter((p) => callBlock(p) === null).length, [rows]);
 
+  const sel = useBulkSelect(shown);
+
   const toggleFlag = (key) =>
     setFlags((prev) => (prev.includes(key) ? prev.filter((f) => f !== key) : [...prev, key]));
 
@@ -334,7 +339,13 @@ export default function ProspectsPage() {
         </div>
       ) : (
         <>
-          <ListBar lists={lists} listId={listId} onPick={setListId} />
+          <ListBar
+            lists={lists}
+            listId={listId}
+            onPick={setListId}
+            onDeleted={() => { setListId(''); loadLists(); loadRows(); }}
+            onError={setErr}
+          />
           <ScrubLadder
             counts={counts}
             callableInView={callableInView}
@@ -389,6 +400,7 @@ export default function ProspectsPage() {
           )}
 
           <div className="card">
+            <BulkBar table="prospects" sel={sel} onDone={loadRows} onError={setErr} />
             {loading && rows.length === 0 ? (
               <div className="empty">Loading prospects…</div>
             ) : shown.length === 0 ? (
@@ -401,6 +413,14 @@ export default function ProspectsPage() {
               <table className="leads">
                 <thead>
                   <tr>
+                    <th className="pick">
+                      <input
+                        type="checkbox"
+                        aria-label={sel.allSelected ? 'Deselect all' : 'Select all'}
+                        checked={sel.allSelected}
+                        onChange={(e) => sel.toggleAll(e.target.checked)}
+                      />
+                    </th>
                     <th>Property</th>
                     <th>Owner</th>
                     <th>Best number</th>
@@ -409,7 +429,7 @@ export default function ProspectsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {shown.map((p) => <ProspectRow key={p.id} p={p} />)}
+                  {shown.map((p) => <ProspectRow key={p.id} p={p} sel={sel} />)}
                 </tbody>
               </table>
             )}
@@ -428,8 +448,36 @@ export default function ProspectsPage() {
  * A dropdown hides exactly that, and the operator picks by name and finds out
  * afterwards.
  */
-function ListBar({ lists, listId, onPick }) {
+function ListBar({ lists, listId, onPick, onDeleted, onError }) {
+  const [confirming, setConfirming] = useState(null);
+  const [busy, setBusy] = useState(false);
+
   if (lists.length === 0) return null;
+
+  /**
+   * Deleting a list takes its prospects with it.
+   *
+   * Through the RPC rather than a plain update, because the two have to move
+   * together and come back together: prospects.list_id is ON DELETE CASCADE, so
+   * a list that is gone from the chips while its three thousand rows still fill
+   * the table below is the worst of both. set_prospect_list_trashed marks
+   * exactly the rows it trashed so restoring the list restores those and not a
+   * prospect somebody deleted by hand last week.
+   */
+  async function del(list) {
+    setBusy(true);
+    const { error } = await supabase.rpc('set_prospect_list_trashed', {
+      p_list_id: list.id,
+      p_trashed: true,
+    });
+    if (error) onError?.(error.message);
+    else onDeleted?.();
+    setBusy(false);
+    setConfirming(null);
+  }
+
+  const target = lists.find((l) => l.id === confirming);
+
   return (
     <div className="pr-listbar">
       <button
@@ -459,6 +507,32 @@ function ListBar({ lists, listId, onPick }) {
           </span>
         </button>
       ))}
+
+      {/* Deleting the *selected* list only. A delete control on every chip is a
+          row of destructive buttons you brush past while picking a list. */}
+      {listId && target && (
+        confirming === listId ? (
+          <span className="confirmdelete" style={{ marginLeft: 8 }}>
+            <span>
+              Delete <strong>{target.name}</strong> and its
+              {' '}{(target.total_count || 0).toLocaleString()} prospects? Both move to Trash together.
+            </span>
+            <button className="btn danger" disabled={busy} onClick={() => del(target)}>
+              {busy ? 'Deleting…' : 'Delete list'}
+            </button>
+            <button className="btn ghost" disabled={busy} onClick={() => setConfirming(null)}>Cancel</button>
+          </span>
+        ) : (
+          <button
+            type="button"
+            className="btn ghost danger"
+            style={{ marginLeft: 8, alignSelf: 'center' }}
+            onClick={() => setConfirming(listId)}
+          >
+            Delete list
+          </button>
+        )
+      )}
     </div>
   );
 }
@@ -732,13 +806,26 @@ function distressTags(p) {
   return DISTRESS_FLAGS.filter((f) => p[f.key]);
 }
 
-function ProspectRow({ p }) {
+function ProspectRow({ p, sel }) {
   const block = callBlock(p);
   const best = bestNumber(p);
   const tags = distressTags(p);
 
   return (
-    <tr onClick={() => navigate(`/prospects/${p.id}`)} style={{ cursor: 'pointer' }}>
+    <tr
+      onClick={() => navigate(`/prospects/${p.id}`)}
+      style={{ cursor: 'pointer' }}
+      className={sel.isSelected(p.id) ? 'picked' : undefined}
+    >
+      {/* stopPropagation, or ticking the box opens the prospect */}
+      <td className="pick" onClick={(e) => e.stopPropagation()}>
+        <input
+          type="checkbox"
+          aria-label={`Select ${p.address || 'prospect'}`}
+          checked={sel.isSelected(p.id)}
+          onChange={(e) => sel.toggle(p.id, e.target.checked)}
+        />
+      </td>
       <td>
         <span className="addr">{p.address || 'No address on file'}</span>
         <span className="sub">

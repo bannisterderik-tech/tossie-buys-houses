@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '../supabase.js';
 import { navigate } from '../router.js';
 import { STATUSES, TEMPERATURES, titleize, formatPhone, fullAddress, timeAgo } from '../lib/format.js';
-import { trash, countLabel } from '../lib/trash.js';
+import useBulkSelect from '../lib/useBulkSelect.js';
+import BulkBar from '../components/BulkBar.jsx';
 
 /**
  * Leads — one page, two views.
@@ -42,9 +43,6 @@ export default function LeadsPage({ initialView = 'list' }) {
   const [dragging, setDragging] = useState(null);
   const [over, setOver] = useState(null);
 
-  const [selected, setSelected] = useState(() => new Set());
-  const [confirmBulk, setConfirmBulk] = useState(false);
-  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     try { localStorage.setItem(VIEW_KEY, view); } catch { /* private mode */ }
@@ -143,47 +141,9 @@ export default function LeadsPage({ initialView = 'list' }) {
     load();
   }
 
+  const sel = useBulkSelect(shown);
+
   const filtered = shown.length !== leads.length;
-
-  // Selecting rows and then filtering them out of view would otherwise leave a
-  // hidden selection that "Delete 40 leads" silently acts on. Only ever act on
-  // what is actually on screen.
-  const shownIds = useMemo(() => new Set(shown.map((l) => l.id)), [shown]);
-  const selectedShown = useMemo(
-    () => [...selected].filter((id) => shownIds.has(id)),
-    [selected, shownIds],
-  );
-  const allShownSelected = shown.length > 0 && selectedShown.length === shown.length;
-
-  function toggleOne(id, on) {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (on) next.add(id); else next.delete(id);
-      return next;
-    });
-  }
-
-  function toggleAllShown(on) {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      for (const l of shown) { if (on) next.add(l.id); else next.delete(l.id); }
-      return next;
-    });
-  }
-
-  async function bulkTrash() {
-    setBusy(true);
-    setErr(null);
-    try {
-      await trash('leads', selectedShown);
-      setSelected(new Set());
-      setConfirmBulk(false);
-      await load();
-    } catch (e) {
-      setErr(e.message);
-    }
-    setBusy(false);
-  }
 
   if (loading) return <div className="empty">Loading leads…</div>;
 
@@ -293,27 +253,7 @@ export default function LeadsPage({ initialView = 'list' }) {
         )
         : (
           <div className="card">
-            {selectedShown.length > 0 && (
-              <div className="bulkbar">
-                <span>{countLabel('leads', selectedShown.length)} selected</span>
-                {confirmBulk ? (
-                  <span className="confirmdelete">
-                    <span>Delete {countLabel('leads', selectedShown.length)}? They move to Trash — you can put them back.</span>
-                    <button className="btn danger" disabled={busy} onClick={bulkTrash}>
-                      {busy ? 'Deleting…' : 'Delete'}
-                    </button>
-                    <button className="btn ghost" disabled={busy} onClick={() => setConfirmBulk(false)}>
-                      Cancel
-                    </button>
-                  </span>
-                ) : (
-                  <>
-                    <button className="btn ghost danger" onClick={() => setConfirmBulk(true)}>Delete</button>
-                    <button className="btn ghost" onClick={() => setSelected(new Set())}>Clear</button>
-                  </>
-                )}
-              </div>
-            )}
+            <BulkBar table="leads" sel={sel} onDone={load} onError={setErr} />
             {shown.length === 0 ? (
               <div className="empty">
                 <strong>{leads.length ? 'Nothing matches those filters' : 'No leads yet'}</strong>
@@ -326,9 +266,9 @@ export default function LeadsPage({ initialView = 'list' }) {
                     <th className="pick">
                       <input
                         type="checkbox"
-                        aria-label={allShownSelected ? 'Deselect all' : 'Select all'}
-                        checked={allShownSelected}
-                        onChange={(e) => toggleAllShown(e.target.checked)}
+                        aria-label={sel.allSelected ? 'Deselect all' : 'Select all'}
+                        checked={sel.allSelected}
+                        onChange={(e) => sel.toggleAll(e.target.checked)}
                       />
                     </th>
                     <th>Property</th>
@@ -345,15 +285,15 @@ export default function LeadsPage({ initialView = 'list' }) {
                       key={l.id}
                       onClick={() => navigate(`/leads/${l.id}`)}
                       style={{ cursor: 'pointer' }}
-                      className={selected.has(l.id) ? 'picked' : undefined}
+                      className={sel.isSelected(l.id) ? 'picked' : undefined}
                     >
                       {/* stopPropagation, or ticking the box opens the lead */}
                       <td className="pick" onClick={(e) => e.stopPropagation()}>
                         <input
                           type="checkbox"
                           aria-label={`Select ${l.address || l.name || 'lead'}`}
-                          checked={selected.has(l.id)}
-                          onChange={(e) => toggleOne(l.id, e.target.checked)}
+                          checked={sel.isSelected(l.id)}
+                          onChange={(e) => sel.toggle(l.id, e.target.checked)}
                         />
                       </td>
                       <td>

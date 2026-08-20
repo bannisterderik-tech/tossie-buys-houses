@@ -397,6 +397,7 @@ export default function CampaignsPage() {
     const { data, error } = await supabase
       .from('broadcast_campaigns')
       .select('*, deals(id, address, city, state, status)')
+      .eq('trashed', false)
       .order('created_at', { ascending: false })
       .limit(200);
 
@@ -489,6 +490,7 @@ export default function CampaignsPage() {
           campaigns={campaigns}
           onOpen={setOpenId}
           onNew={() => setBuilding(true)}
+          onDeleted={load}
         />
       )}
     </>
@@ -572,7 +574,7 @@ function SendingStateBanner({ teamKill, settings, numbers }) {
 
 /* ── the list ─────────────────────────────────────────────────────────────── */
 
-function CampaignList({ campaigns, onOpen, onNew }) {
+function CampaignList({ campaigns, onOpen, onNew, onDeleted }) {
   return (
     <div className="card">
       <h2>Campaigns</h2>
@@ -599,6 +601,7 @@ function CampaignList({ campaigns, onOpen, onNew }) {
               <th>Reached</th>
               <th>Suppressed</th>
               <th className="hide-sm">Created</th>
+              <th />
             </tr>
           </thead>
           <tbody>
@@ -626,12 +629,67 @@ function CampaignList({ campaigns, onOpen, onNew }) {
                     : <span className="sub">—</span>}
                 </td>
                 <td className="hide-sm sub">{timeAgo(c.created_at)}</td>
+                {/* stopPropagation, or deleting opens the campaign underneath */}
+                <td onClick={(e) => e.stopPropagation()} style={{ textAlign: 'right' }}>
+                  <CampaignDelete campaign={c} onDeleted={onDeleted} />
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
       )}
     </div>
+  );
+}
+
+/**
+ * Delete one campaign.
+ *
+ * Trash rather than DELETE, always — and for a *sent* campaign that is not a
+ * preference, it is the only option the database will allow.
+ * broadcast_campaign_no_delete_after_materialise refuses to drop any campaign
+ * whose audience was built, because broadcast_recipients is the record of who
+ * was texted and who was suppressed and why, and that record is the exact thing
+ * a carrier asks to see when it reviews a Low Volume Mixed campaign. So the
+ * send history survives being tidied off this screen; only the row's visibility
+ * changes. A never-built draft has no such record, and Trash will destroy that
+ * one on request.
+ */
+function CampaignDelete({ campaign, onDeleted }) {
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+
+  async function go() {
+    setBusy(true);
+    const { error } = await supabase
+      .from('broadcast_campaigns').update({ trashed: true }).eq('id', campaign.id);
+    if (error) { setErr(error.message); setBusy(false); setConfirming(false); return; }
+    setConfirming(false);
+    setBusy(false);
+    onDeleted?.();
+  }
+
+  if (err) return <span className="err inline">{err}</span>;
+
+  if (!confirming) {
+    return (
+      <button className="btn ghost danger" onClick={() => setConfirming(true)}>Delete</button>
+    );
+  }
+
+  return (
+    <span className="confirmdelete">
+      <span>
+        {campaign.materialised_at
+          ? 'Hide it? The send record is kept either way — it cannot be destroyed.'
+          : 'Delete this draft? It moves to Trash.'}
+      </span>
+      <button className="btn danger" disabled={busy} onClick={go}>
+        {busy ? 'Deleting…' : 'Delete'}
+      </button>
+      <button className="btn ghost" disabled={busy} onClick={() => setConfirming(false)}>Cancel</button>
+    </span>
   );
 }
 

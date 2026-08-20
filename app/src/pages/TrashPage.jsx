@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../supabase.js';
-import { navigate } from '../router.js';
-import { restore, purge, TRASHABLE, countLabel } from '../lib/trash.js';
+import { restore, purge, TRASHABLE, countLabel, purgeBlockedReason } from '../lib/trash.js';
 import { formatPhone, timeAgo } from '../lib/format.js';
 
 /**
@@ -14,13 +13,16 @@ import { formatPhone, timeAgo } from '../lib/format.js';
  * Purging is offered but kept deliberately awkward: it names what it will
  * destroy, it needs a second click, and it never batches across object types.
  */
-const TABLES = ['leads', 'buyers', 'deals', 'prospects'];
+const TABLES = ['leads', 'buyers', 'deals', 'prospects', 'prospect_lists', 'broadcast_campaigns'];
 
 const SELECT = {
   leads:     'id, name, address, city, phone, phone_mobile, status, trashed_at',
   buyers:    'id, name, entity_name, phone, email, status, trashed_at',
   deals:     'id, address, city, status, contract_price, trashed_at',
-  prospects: 'id, owner_name, address, city, phone, trashed_at',
+  prospects: 'id, owner_name, address, city, trashed_at',
+  prospect_lists: 'id, name, source_vendor, total_count, trashed_at',
+  // materialised_at decides whether this one can ever be destroyed.
+  broadcast_campaigns: 'id, name, status, sent_count, total_recipients, materialised_at, trashed_at',
 };
 
 export default function TrashPage() {
@@ -89,16 +91,21 @@ export default function TrashPage() {
         if (!list.length) return null;
         const meta = TRASHABLE[table];
         const purgeAllKey = `${table}:*`;
+        const destroyable = list.filter((r) => !purgeBlockedReason(table, r));
 
         return (
           <div className="card" key={table} style={{ marginBottom: 16 }}>
             <h2 style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span>{countLabel(table, list.length)}</span>
-              {purging === purgeAllKey ? (
+              {destroyable.length === 0 ? null : purging === purgeAllKey ? (
                 <span className="confirmdelete">
-                  <span>Permanently destroy all {countLabel(table, list.length)}? This cannot be undone.</span>
+                  <span>
+                    Permanently destroy {countLabel(table, destroyable.length)}? This cannot be undone.
+                    {destroyable.length !== list.length
+                      && ` ${list.length - destroyable.length} kept — they hold a send record.`}
+                  </span>
                   <button className="btn danger" disabled={busy}
-                          onClick={() => act(purge, table, list.map((r) => r.id))}>
+                          onClick={() => act(purge, table, destroyable.map((r) => r.id))}>
                     Destroy
                   </button>
                   <button className="btn ghost" disabled={busy} onClick={() => setPurging(null)}>
@@ -117,6 +124,7 @@ export default function TrashPage() {
                 <tbody>
                   {list.map((r) => {
                     const key = `${table}:${r.id}`;
+                    const blocked = purgeBlockedReason(table, r);
                     return (
                       <tr key={r.id}>
                         <td>
@@ -127,7 +135,16 @@ export default function TrashPage() {
                           {r.trashed_at ? `deleted ${timeAgo(r.trashed_at)}` : 'deleted'}
                         </td>
                         <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
-                          {purging === key ? (
+                          {blocked ? (
+                            <>
+                              <button className="btn ghost" disabled={busy}
+                                      onClick={() => act(restore, table, r.id)}>
+                                Restore
+                              </button>
+                              {' '}
+                              <span className="sub" title={blocked}>kept permanently</span>
+                            </>
+                          ) : purging === key ? (
                             <span className="confirmdelete">
                               <span>Destroy permanently?</span>
                               <button className="btn danger" disabled={busy}
@@ -176,6 +193,7 @@ export default function TrashPage() {
 }
 
 function describe(table, r) {
+  if (table === 'prospect_lists' || table === 'broadcast_campaigns') return r.name || 'Untitled';
   if (table === 'buyers') return r.name || r.entity_name || 'Unnamed buyer';
   if (table === 'prospects') return r.address || r.owner_name || 'Untitled prospect';
   return r.address || r.name || 'Untitled';
@@ -186,6 +204,14 @@ function subtitle(table, r) {
   if (table === 'leads') bits.push(r.name, r.city, formatPhone(r.phone || r.phone_mobile), r.status);
   if (table === 'buyers') bits.push(r.entity_name, formatPhone(r.phone), r.email);
   if (table === 'deals') bits.push(r.city, r.status, r.contract_price ? `$${r.contract_price.toLocaleString()}` : null);
-  if (table === 'prospects') bits.push(r.owner_name, r.city, formatPhone(r.phone));
+  if (table === 'prospects') bits.push(r.owner_name, r.city);
+  if (table === 'prospect_lists') {
+    bits.push(r.source_vendor,
+      r.total_count ? `${r.total_count.toLocaleString()} prospects — restored with the list` : null);
+  }
+  if (table === 'broadcast_campaigns') {
+    bits.push(r.status,
+      r.materialised_at ? `${r.sent_count ?? 0} of ${r.total_recipients ?? 0} sent` : 'never built');
+  }
   return bits.filter(Boolean).join(' · ') || '—';
 }
