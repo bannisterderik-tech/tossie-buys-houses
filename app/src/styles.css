@@ -1182,3 +1182,24 @@ table.leads tr.picked { background: #eef3fb; }
   padding: 5px 9px; border: 1.5px solid var(--line); border-radius: 7px;
   font-size: 0.82rem; min-width: 220px;
 }
+
+/* ── team ─────────────────────────────────────────────────────────────── */
+.teamform { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; margin: 12px 0; }
+.teamform label { display: flex; flex-direction: column; gap: 4px; flex: 1 1 220px; }
+.teamform label > span { font-size: 0.82rem; font-weight: 700; color: var(--muted); }
+.teamform label > span em { font-style: normal; font-weight: 400; opacity: 0.75; }
+.teamform input {
+  padding: 8px 11px; border: 1.5px solid var(--line); border-radius: 8px;
+  font-size: 0.9rem; background: #fff; color: var(--ink); width: 100%;
+}
+.teamform input:focus { outline: 0; border-color: var(--navy); box-shadow: 0 0 0 3px rgba(26,68,133,0.13); }
+/* Sized to its text, not stretched to the row — the grid was making it a slab. */
+.teamform .btn { flex: 0 0 auto; align-self: flex-end; white-space: nowrap; }
+
+.rolegrid {
+  display: grid; gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+}
+.rolecard { border: 1px solid var(--line); border-radius: 9px; padding: 11px 13px; background: #fff; }
+.rolecard strong { display: block; font-size: 0.92rem; margin-bottom: 3px; }
+.rolecard p { margin: 0; font-size: 0.85rem; color: var(--muted); line-height: 1.45; }

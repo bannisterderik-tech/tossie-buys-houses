@@ -136,10 +136,17 @@ export default function TeamPage() {
               })}
             </tbody>
           </table>
-          {manage && (
+          {manage && members.length > 0 && (
             <p className="sub" style={{ marginTop: 10 }}>
               The owner cannot be changed here — that is the account the team belongs to.
             </p>
+          )}
+          {members.length === 0 && (
+            <div className="empty">
+              <strong>Nobody has signed in yet</strong>
+              Allow an address below; they appear here as a VA the first time they use their
+              magic link.
+            </div>
           )}
         </div>
       </div>
@@ -154,14 +161,14 @@ export default function TeamPage() {
               <strong> VA </strong> the first time they sign in, and you promote them from there.
             </p>
 
-            <form onSubmit={invite} className="fields">
+            <form onSubmit={invite} className="teamform">
               <label>
-                Email
+                <span>Email</span>
                 <input type="email" value={email} onChange={(e) => setEmail(e.target.value)}
                        placeholder="name@example.com" required />
               </label>
               <label>
-                Who is it <span className="fine">optional</span>
+                <span>Who is it <em>optional</em></span>
                 <input value={note} onChange={(e) => setNote(e.target.value)}
                        placeholder="Al — acquisitions" />
               </label>
@@ -203,14 +210,14 @@ export default function TeamPage() {
       <div className="card" style={{ marginTop: 16 }}>
         <h2>What each role can do</h2>
         <div className="body">
-          <dl className="facts">
+          <div className="rolegrid">
             {ROLES.map((r) => (
-              <div key={r.key}>
-                <dt>{r.label}</dt>
-                <dd>{r.blurb}</dd>
+              <div className="rolecard" key={r.key}>
+                <strong>{r.label}</strong>
+                <p>{r.blurb}</p>
               </div>
             ))}
-          </dl>
+          </div>
           <p className="sub" style={{ marginTop: 10, maxWidth: '62ch' }}>
             These are enforced by the database, not by the menu. A role without a capability
             is refused by the API even if somebody reaches the endpoint directly.
