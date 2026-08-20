@@ -63,6 +63,7 @@ export default function BuyersPage() {
       const { data, error } = await supabase
         .from('buyers')
         .select('*, skip_reason:buyer_skip_reason')
+        .eq('trashed', false)
         .order('name')
         .limit(PAGE_LIMIT);
 

@@ -16,6 +16,7 @@ const NAV = [
   { to: '/deals', label: 'Deals' },
   { to: '/campaigns', label: 'Campaigns' },
   { to: '/import', label: 'Import' },
+  { to: '/trash', label: 'Trash' },
   { to: '/settings/phone', label: 'Phone settings' },
 ];
 

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '../supabase.js';
 import { navigate } from '../router.js';
+import DeleteButton from '../components/DeleteButton.jsx';
 import { callingWindow } from '../lib/calling-window.js';
 import { dateOnly, formatPhone, fullDate, timeAgo, titleize } from '../lib/format.js';
 import {
@@ -180,6 +181,14 @@ export default function ProspectDetail({ id }) {
           {p.list?.source_vendor && ` · ${p.list.source_vendor}`}
         </span>
         <span className="pr-sub"><a href="/app/prospects">All prospects</a></span>
+        <div className="toolbar" style={{ marginTop: 10, marginBottom: 0 }}>
+          <DeleteButton
+            table="prospects"
+            id={p.id}
+            name={p.address || p.owner_name}
+            onDeleted={() => navigate('/prospects')}
+          />
+        </div>
       </div>
 
       {err && <div className="err">{err}</div>}

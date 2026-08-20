@@ -103,10 +103,11 @@ export default function DealsPage() {
   const load = useCallback(async () => {
     const [d, b, i] = await Promise.all([
       supabase.from('deals').select('*', { count: 'exact' })
+        .eq('trashed', false)
         .order('created_at', { ascending: false }).limit(DEAL_CAP),
       // Only what a card and the buyer column need. The buyers page owns the
       // rest of that table.
-      supabase.from('buyers').select('id, name, entity_name').limit(5000),
+      supabase.from('buyers').select('id, name, entity_name').eq('trashed', false).limit(5000),
       // Two columns across every deal — this feeds the dispo funnel, and
       // pulling whole interest rows to count them would move a lot of notes
       // and match reasons into the browser to be thrown away.

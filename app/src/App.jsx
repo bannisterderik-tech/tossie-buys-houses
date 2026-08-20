@@ -19,6 +19,7 @@ import DealDetail from './pages/DealDetail.jsx';
 import CampaignsPage from './pages/CampaignsPage.jsx';
 import ProspectsPage from './pages/ProspectsPage.jsx';
 import ProspectDetail from './pages/ProspectDetail.jsx';
+import TrashPage from './pages/TrashPage.jsx';
 
 export default function App() {
   const [session, setSession] = useState(null);
@@ -87,6 +88,9 @@ export default function App() {
         : prospectId ? <ProspectDetail id={prospectId} />
         : path === '/prospects' ? <ProspectsPage />
         : path === '/import' ? <ImportPage />
+        // The other half of every delete button. Unrouted, "it moves to Trash"
+        // is a promise with nowhere to keep it.
+        : path === '/trash' ? <TrashPage />
         // Leads and Board are one page with a view toggle. This stays as a deep
         // link so existing bookmarks land somewhere real; the key forces a
         // remount so arriving here actually selects the board, rather than

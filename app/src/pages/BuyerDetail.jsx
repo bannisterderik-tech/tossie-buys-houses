@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '../supabase.js';
 import { navigate } from '../router.js';
+import DeleteButton from '../components/DeleteButton.jsx';
 import InlineField from '../components/InlineField.jsx';
 import { titleize, formatPhone, fullDate, timeAgo, dateOnly } from '../lib/format.js';
 import { callingWindow } from '../lib/calling-window.js';
@@ -157,6 +158,8 @@ export default function BuyerDetail({ id }) {
           {BUYER_STATUSES.map((s) => <option key={s} value={s}>{titleize(s)}</option>)}
         </select>
         <CallButton buyer={buyer} block={block} />
+        <span style={{ flex: 1 }} />
+        <DeleteButton table="buyers" id={buyer.id} name={buyer.name} />
       </div>
 
       {/* Above the fold and before anything else, because it changes what the

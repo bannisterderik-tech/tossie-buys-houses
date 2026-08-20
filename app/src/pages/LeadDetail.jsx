@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '../supabase.js';
 import { navigate } from '../router.js';
+import DeleteButton from '../components/DeleteButton.jsx';
 import InlineField from '../components/InlineField.jsx';
 import PropertyLinks from '../components/PropertyLinks.jsx';
 import DispositionBar from '../components/DispositionBar.jsx';
@@ -338,6 +339,8 @@ export default function LeadDetail({ id }) {
         <select value={lead.temperature} onChange={(e) => patch({ temperature: e.target.value })}>
           {TEMPERATURES.map((t) => <option key={t} value={t}>{titleize(t)}</option>)}
         </select>
+        <span style={{ flex: 1 }} />
+        <DeleteButton table="leads" id={lead.id} name={lead.address || lead.name} onDeleted={() => navigate('/')} />
       </div>
 
       <CallCard

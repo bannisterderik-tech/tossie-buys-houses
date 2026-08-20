@@ -208,6 +208,7 @@ export default function ProspectsPage() {
     let query = supabase
       .from('prospects')
       .select('*, callable:prospect_is_callable')
+      .eq('trashed', false)
       .order('created_at', { ascending: false })
       .limit(PAGE_LIMIT);
 

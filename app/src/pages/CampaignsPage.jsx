@@ -127,6 +127,11 @@ const SKIP_REASONS = {
     tone: 'quiet',
     why: 'The lead was trashed. Untrash it if it belongs in this send.',
   },
+  buyer_trashed: {
+    label: 'Buyer is deleted',
+    tone: 'quiet',
+    why: 'The buyer was deleted. Restore it from Trash if it belongs in this send — buyer_skip_reason enforces this in the database, so a deleted buyer cannot be blasted even by a campaign built before the deletion.',
+  },
   no_phone: {
     label: 'No number on file',
     tone: 'warn',
@@ -291,7 +296,7 @@ function skipMeta(reason) {
 const SKIP_ORDER = [
   'opted_out', 'dnc', 'litigator',
   'no_consent', 'no_phone', 'phone_invalid', 'outside_calling_window', 'send_refused',
-  'buyer_inactive', 'lead_trashed', 'not_in_buy_box',
+  'buyer_inactive', 'lead_trashed', 'buyer_trashed', 'not_in_buy_box',
 ];
 
 /** A reason this page has not been taught about sorts last rather than first. */
@@ -704,6 +709,7 @@ function Builder({ userId, onCancel, onBuilt }) {
      */
     supabase.from('buyers')
       .select('id, name, entity_name, phone, status, rating, counties, consent_sms, tcpa_opt_in, skip_reason:buyer_skip_reason', { count: 'exact' })
+      .eq('trashed', false)
       .order('name')
       .limit(2000)
       .then(({ data, error, count }) => {

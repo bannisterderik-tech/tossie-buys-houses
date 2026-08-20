@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../supabase.js';
 import InlineField from '../components/InlineField.jsx';
+import DeleteButton from '../components/DeleteButton.jsx';
+import { navigate } from '../router.js';
 import {
   DEAL_STATUSES, OCCUPANCY, dealStatusLabel,
   clockTone, countdownLabel, dateOnly, daysUntil,
@@ -229,6 +231,14 @@ function DealHead({ deal }) {
           {deal.county ? ` · ${deal.county} County` : ''}
           {' · '}<a href="/app/deals">All deals</a>
         </p>
+        <div className="toolbar" style={{ marginTop: 10, marginBottom: 0 }}>
+          <DeleteButton
+            table="deals"
+            id={deal.id}
+            name={deal.address}
+            onDeleted={() => navigate('/deals')}
+          />
+        </div>
       </div>
 
       <div className="dealclocks">
