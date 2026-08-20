@@ -1136,3 +1136,16 @@ table.leads input[type="checkbox"] { cursor: pointer; width: 15px; height: 15px;
 table.leads tr.picked { background: #eef3fb; }
 
 .err.inline { display: inline-block; margin-left: 9px; padding: 4px 9px; font-size: 0.82rem; }
+
+/* Checkbox on a board card: top-right, out of the way of the address. */
+.boardcard { position: relative; }
+.boardcard .cardpick { position: absolute; top: 8px; right: 8px; line-height: 0; }
+.boardcard .cardpick input { width: 15px; height: 15px; cursor: pointer; }
+.boardcard.dealcard strong { padding-right: 22px; display: block; }
+.boardcard.picked { background: #eef3fb; box-shadow: inset 0 0 0 2px var(--navy); }
+
+/* ── follow-up scheduler ──────────────────────────────────────────────── */
+.followup { display: flex; flex-direction: column; gap: 7px; }
+.followup-presets, .followup-exact { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.followup .btn { padding: 5px 11px; font-size: 0.82rem; }
+.followup .inline-input { max-width: 220px; }

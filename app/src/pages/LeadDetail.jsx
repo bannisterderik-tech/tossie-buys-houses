@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '../supabase.js';
 import { navigate } from '../router.js';
 import DeleteButton from '../components/DeleteButton.jsx';
+import FollowUpField from '../components/FollowUpField.jsx';
 import InlineField from '../components/InlineField.jsx';
 import PropertyLinks from '../components/PropertyLinks.jsx';
 import DispositionBar from '../components/DispositionBar.jsx';
@@ -496,7 +497,10 @@ export default function LeadDetail({ id }) {
                 </dd>
                 <dt>Attempts</dt><dd>{lead.call_attempts}</dd>
                 <dt>Last contact</dt><dd>{lead.last_contacted_at ? timeAgo(lead.last_contacted_at) : 'never'}</dd>
-                <dt>Next follow-up</dt><dd>{lead.next_follow_up_at ? fullDate(lead.next_follow_up_at) : '—'}</dd>
+                <FollowUpField
+                  value={lead.next_follow_up_at}
+                  onSave={(v) => patch({ next_follow_up_at: v })}
+                />
                 <dt>TCPA opt-in</dt><dd>{lead.tcpa_opt_in ? fullDate(lead.tcpa_opt_in_at) : 'No'}</dd>
                 <dt>Consent</dt>
                 <dd>{[lead.consent_sms && 'SMS', lead.consent_email && 'Email'].filter(Boolean).join(' · ') || 'None'}</dd>

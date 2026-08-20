@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '../supabase.js';
 import { navigate } from '../router.js';
+import useBulkSelect from '../lib/useBulkSelect.js';
+import DealsBulkBar from '../components/DealsBulkBar.jsx';
 import { TEAM_ID } from '../lib/team.js';
 import {
   dealStatusLabel,
@@ -167,6 +169,8 @@ export default function DealsPage() {
         .some((v) => String(v).toLowerCase().includes(needle)));
   }, [deals, q, buyerName]);
 
+  const sel = useBulkSelect(shown);
+
   if (loading) return <div className="empty">Loading deals…</div>;
 
   const columns = showQuiet ? [...BOARD_COLUMNS, ...QUIET_COLUMNS] : BOARD_COLUMNS;
@@ -220,7 +224,12 @@ export default function DealsPage() {
             {`Searching ${deals.length} deals by address, city, county, title company and buyer.`}
           </div>
         )
-        : <Board deals={shown} columns={columns} buyerName={buyerName} />}
+        : (
+          <>
+            <DealsBulkBar deals={shown} sel={sel} onDone={load} onError={setErr} />
+            <Board deals={shown} columns={columns} buyerName={buyerName} sel={sel} />
+          </>
+        )}
     </>
   );
 }
@@ -234,7 +243,7 @@ export default function DealsPage() {
    check_violation the operator cannot act on, or a prompt for two more facts
    in the middle of a drag gesture. The move lives on the detail page, where
    those facts are collected and written in the same UPDATE as the status. */
-function Board({ deals, columns, buyerName }) {
+function Board({ deals, columns, buyerName, sel }) {
   const grouped = useMemo(() => {
     const g = {};
     for (const d of deals) (g[d.status] ??= []).push(d);
@@ -255,7 +264,7 @@ function Board({ deals, columns, buyerName }) {
               </h2>
               <div className="body boardcards">
                 {cards.length === 0 && <p className="colempty">Empty</p>}
-                {cards.map((d) => <DealCard key={d.id} deal={d} buyerName={buyerName} />)}
+                {cards.map((d) => <DealCard key={d.id} deal={d} buyerName={buyerName} sel={sel} />)}
               </div>
             </div>
           </div>
@@ -288,13 +297,13 @@ function byUrgency(a, b) {
   return ka === kb ? 0 : ka < kb ? -1 : 1;
 }
 
-function DealCard({ deal, buyerName }) {
+function DealCard({ deal, buyerName, sel }) {
   const buyer = deal.assigned_buyer_id ? buyerName.get(deal.assigned_buyer_id) : null;
   const settled = deal.status === 'closed';
 
   return (
     <div
-      className="boardcard dealcard"
+      className={`boardcard dealcard${sel.isSelected(deal.id) ? ' picked' : ''}`}
       onClick={() => navigate(`/deals/${deal.id}`)}
       role="button"
       tabIndex={0}
@@ -306,6 +315,15 @@ function DealCard({ deal, buyerName }) {
         navigate(`/deals/${deal.id}`);
       }}
     >
+      {/* stopPropagation, or ticking the box opens the deal */}
+      <label className="cardpick" onClick={(e) => e.stopPropagation()}>
+        <input
+          type="checkbox"
+          aria-label={`Select ${deal.address}`}
+          checked={sel.isSelected(deal.id)}
+          onChange={(e) => sel.toggle(deal.id, e.target.checked)}
+        />
+      </label>
       <strong>{deal.address}</strong>
       <span className="sub">
         {[[deal.city, deal.state].filter(Boolean).join(', '), deal.zip].filter(Boolean).join(' ') || '—'}
