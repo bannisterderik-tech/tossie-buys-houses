@@ -5,6 +5,7 @@ import { STATUSES, TEMPERATURES, titleize, formatPhone, fullAddress, timeAgo } f
 import useBulkSelect from '../lib/useBulkSelect.js';
 import BulkBar from '../components/BulkBar.jsx';
 import { stashSelection } from '../lib/campaignHandoff.js';
+import SdrEnrollAction from '../components/SdrEnrollAction.jsx';
 
 /**
  * Leads — one page, two views.
@@ -295,6 +296,7 @@ export default function LeadsPage({ initialView = 'list' }) {
               onDone={load}
               onError={setErr}
               onText={(ids) => { stashSelection('leads', ids); navigate('/campaigns'); }}
+              extra={<SdrEnrollAction sel={sel} onDone={load} onError={setErr} />}
               textBlocked={sel.count > LEADS_CAP
                 ? `Too many to text — ${sel.count} selected, ${LEADS_CAP} is the cap on a seller audience`
                 : null}

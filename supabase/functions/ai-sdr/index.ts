@@ -357,15 +357,42 @@ function buildSystemPrompt(opts: {
   lead: Record<string, unknown>;
   qualification: Record<string, unknown>;
   isDrip: boolean;
+  persona?: Record<string, any> | null;
 }): { stable: string; volatile: string } {
-  const tone = {
+  // Keyed rather than indexed by a bare `any`: the persona's personality comes
+  // out of the database untyped, and an unrecognised value has to fall through
+  // to the default voice rather than typecheck by accident.
+  const toneKey = String(opts.persona?.personality ?? opts.personality) as
+    'aggressive' | 'balanced' | 'supportive';
+  const TONES: Record<'aggressive' | 'balanced' | 'supportive', string> = {
     aggressive:
       'Direct and assumptive. Ask for the appointment early and ask again. Do not pad with pleasantries.',
     balanced:
       'Straightforward and warm. Short sentences, no sales voice, no exclamation marks. Sound like a person who buys houses, not a company.',
     supportive:
       'Patient and low-pressure. Many of these sellers are in a hard spot. Lead with "no pressure either way" and mean it.',
-  }[opts.personality] ?? 'Straightforward and warm. Short sentences, no sales voice.';
+  };
+  const tone = TONES[toneKey] ?? 'Straightforward and warm. Short sentences, no sales voice.';
+
+  // The persona's own additions, in the operator's words.
+  //
+  // Placed AFTER the hard rules and never able to reach them: this text is
+  // written by a person on the Team's side, not by a seller, but it is still
+  // the one part of the prompt that is edited casually. The no-price rule, the
+  // bot disclosure and the never-do list are above it and are not restatable
+  // from down here — a persona that says "you may quote a range" is a persona
+  // that contradicts a rule the output filter enforces anyway.
+  const personaBlock = [
+    opts.persona?.custom_rules?.trim()
+      ? `=== EXTRA RULES FOR THIS KIND OF LEAD ===\n${opts.persona.custom_rules.trim()}`
+      : '',
+    opts.persona?.opener_guidance?.trim()
+      ? `=== HOW TO OPEN WITH THIS KIND OF LEAD ===\n${opts.persona.opener_guidance.trim()}`
+      : '',
+    opts.persona?.learned_guidance?.trim()
+      ? `=== CORRECTIONS FROM PREVIOUS MESSAGES ===\nThese are notes a human wrote after reading something you sent. Follow them.\n${opts.persona.learned_guidance.trim()}`
+      : '',
+  ].filter(Boolean).join('\n\n');
 
   const known = Object.entries(opts.qualification)
     .filter(([, v]) => v !== null && v !== undefined && v !== '')
@@ -412,7 +439,7 @@ ${STEP_GUIDE}
 
 Do not march through this rigidly. If a seller volunteers three answers at once, record all three and skip ahead. If they ask a question, answer it first.
 
-=== HOW TO REPLY ===
+${personaBlock ? `${personaBlock}\n\n` : ''}=== HOW TO REPLY ===
 Call tools to record what you learned, then write the text message you want sent as your final plain-text output. Your plain text IS the message — it goes to the seller exactly as you write it, so do not add commentary, do not label it, and do not write anything you would not want a homeowner to read.
 
 If you decide no message should be sent at all, call flag_for_human and output nothing.
@@ -897,6 +924,22 @@ async function executeTurn(
     ? `The conversation so far:\n\n${transcript}\n\nRespond to their last message. You are at step: ${opts.step}.`
     : `This is the first message. Nothing has been said yet. Source: ${lead.source ?? 'unknown'}.`;
 
+  // Read live, per turn, and never frozen onto the conversation — the same
+  // reasoning as the mode resolution above. An operator who fixes a persona
+  // after reading a bad message expects the next message to be different,
+  // including on conversations already in flight. Falls back to the team
+  // default so a lead whose persona was deleted still has a script.
+  const { data: persona } = await admin
+    .from('sdr_personas')
+    .select('*')
+    .eq('team_id', lead.team_id)
+    .eq('active', true)
+    .or(`id.eq.${lead.sdr_persona_id ?? '00000000-0000-0000-0000-000000000000'},is_default.eq.true`)
+    // A lead's own persona beats the default when both come back.
+    .order('is_default', { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
   const system = buildSystemPrompt({
     teamName: opts.teamName,
     personality: settings.personality,
@@ -904,6 +947,7 @@ async function executeTurn(
     lead,
     qualification: state.qualification,
     isDrip: opts.isDrip,
+    persona,
   });
 
   const claudeMessages: Array<{ role: 'user' | 'assistant'; content: unknown }> = [
@@ -1155,7 +1199,12 @@ function blockedReason(
   conv?: Record<string, any> | null,
 ): string | null {
   if (!settings?.enabled) return 'sdr_disabled_for_team';
-  if (lead.sdr_enabled === false) return 'sdr_disabled_for_lead';
+  // `!== true`, not `=== false`. The column was nullable and every imported
+  // lead sat at NULL, which is not false — so the old check enrolled the entire
+  // database by omission and would have started texting a list nobody picked
+  // the moment the team switch went on. Enrolment is opt-in; the column is now
+  // NOT NULL DEFAULT false and this is the matching test.
+  if (lead.sdr_enabled !== true) return 'sdr_disabled_for_lead';
   if (!settings.sms_channel_enabled) return 'sms_channel_disabled';
   if (lead.trashed) return 'lead_trashed';
   if (lead.is_dnc || lead.is_litigator) return 'lead_do_not_contact';

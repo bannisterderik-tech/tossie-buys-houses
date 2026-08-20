@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../supabase.js';
 import { TEAM_ID } from '../lib/team.js';
+import SdrPersonas from '../components/SdrPersonas.jsx';
 import { timeAgo, titleize, fullAddress } from '../lib/format.js';
 import { refusalFrom } from '../lib/sms-refusals.js';
 
@@ -144,7 +145,7 @@ export default function SdrPage() {
       // key sdr_conversations has to it, so the row carries who this is about.
       // count:'exact' is the true depth of the queue regardless of the cap.
       supabase.from('sdr_conversations')
-        .select('*, leads(id, name, owner_name, address, city, state, zip)', { count: 'exact' })
+        .select('*, leads(id, name, owner_name, address, city, state, zip, sdr_persona_id)', { count: 'exact' })
         .not('pending_draft', 'is', null)
         .order('pending_draft_at', { ascending: true })
         .limit(QUEUE_LIMIT),
@@ -269,6 +270,8 @@ export default function SdrPage() {
           </>
         )}
       </div>
+
+      <SdrPersonas />
     </>
   );
 }
@@ -438,6 +441,66 @@ function ModeCard({ settings, team, mode, enabled, confirmingAuto, setConfirming
  * cannot be trusted with a number, and a human who types one is the judgment
  * this whole design defers to.
  */
+/**
+ * Thumbs on one message, with the note being the part that matters.
+ *
+ * A bare thumbs-down teaches nothing — apply_sdr_feedback refuses one without a
+ * note, deliberately — so the note box opens with the rating rather than hiding
+ * behind a second click. Rating the SDR's draft rather than the operator's
+ * edited version is the whole point: the edit is a human's sentence, and what
+ * needs correcting is the script that produced the original.
+ */
+function RateMessage({ conv, lead, body }) {
+  const [sent, setSent] = useState(null);
+  const [rating, setRating] = useState(null);
+  const [note, setNote] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  if (!body) return null;
+  if (sent) return <span className="fine">Thanks — noted{sent === 'down' ? ' for the script' : ''}.</span>;
+
+  async function save(r) {
+    setBusy(true);
+    const { error } = await supabase.from('sdr_message_feedback').insert({
+      team_id: TEAM_ID,
+      conversation_id: conv.id,
+      lead_id: lead?.id ?? null,
+      persona_id: lead?.sdr_persona_id ?? null,
+      rating: r,
+      body,
+      note: note.trim() || null,
+    });
+    setBusy(false);
+    if (!error) setSent(r);
+  }
+
+  if (!rating) {
+    return (
+      <span className="ratebtns">
+        <button className="btn ghost" title="Good message" onClick={() => setRating('up')}>Good</button>
+        <button className="btn ghost" title="Bad message — say why" onClick={() => setRating('down')}>Bad</button>
+      </span>
+    );
+  }
+
+  return (
+    <span className="ratebtns">
+      <input
+        value={note}
+        onChange={(e) => setNote(e.target.value)}
+        placeholder={rating === 'down' ? 'What was wrong with it?' : 'What worked? (optional)'}
+        disabled={busy}
+      />
+      <button className="btn" disabled={busy || (rating === 'down' && !note.trim())} onClick={() => save(rating)}>
+        {busy ? 'Saving…' : 'Save'}
+      </button>
+      <button className="btn ghost" disabled={busy} onClick={() => { setRating(null); setNote(''); }}>
+        Cancel
+      </button>
+    </span>
+  );
+}
+
 function DraftRow({ conv, mode, onDone }) {
   const [body, setBody] = useState(conv.pending_draft ?? '');
   const [busy, setBusy] = useState(null);   // null | 'approve' | 'discard' | 'claim'
@@ -526,6 +589,9 @@ function DraftRow({ conv, mode, onDone }) {
           {body.length} characters{body.length > 160 ? ' — over one SMS segment' : ''}
           {edited ? ' · edited' : ''}
         </span>
+        {/* Rated on what the SDR wrote, not on the operator's edit — the point
+            is to teach the script, and an edited body is the human's sentence. */}
+        <RateMessage conv={conv} lead={lead} body={conv.pending_draft ?? ''} />
         <div className="confirmbtns">
           <button
             className="btn"

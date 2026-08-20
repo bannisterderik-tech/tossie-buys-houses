@@ -9,7 +9,7 @@ import { useCan } from '../lib/capabilities.jsx';
  * delete does: the number here can be three hundred, and a bare "Are you sure?"
  * is not enough information to answer.
  */
-export default function BulkBar({ table, sel, onDone, onError, onText, textBlocked }) {
+export default function BulkBar({ table, sel, onDone, onError, onText, textBlocked, extra }) {
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const { can } = useCan();
@@ -53,6 +53,7 @@ export default function BulkBar({ table, sel, onDone, onError, onText, textBlock
               ? <span className="sub" title={textBlocked}>{textBlocked}</span>
               : <button className="btn" onClick={() => onText(sel.ids)}>Text selected</button>
           )}
+          {extra}
           {mayDelete && (
             <button className="btn ghost danger" onClick={() => setConfirming(true)}>Delete</button>
           )}

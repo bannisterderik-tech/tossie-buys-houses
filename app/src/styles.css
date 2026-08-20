@@ -1174,3 +1174,11 @@ table.leads tr.picked { background: #eef3fb; }
 .dispobar { display: flex; gap: 7px; flex-wrap: wrap; margin-top: 12px; }
 .dispobar .btn.ok   { color: #1d7a45; border-color: currentColor; }
 .dispobar .btn.stop { color: var(--danger, #b4232a); border-color: currentColor; }
+
+/* Rating controls on an SDR draft. */
+.ratebtns { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.ratebtns .btn { padding: 4px 10px; font-size: 0.8rem; }
+.ratebtns input {
+  padding: 5px 9px; border: 1.5px solid var(--line); border-radius: 7px;
+  font-size: 0.82rem; min-width: 220px;
+}
