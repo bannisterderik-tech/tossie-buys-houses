@@ -3,6 +3,7 @@ import { supabase } from '../supabase.js';
 import { navigate } from '../router.js';
 import useBulkSelect from '../lib/useBulkSelect.js';
 import BulkBar from '../components/BulkBar.jsx';
+import { stashSelection } from '../lib/campaignHandoff.js';
 import { TEAM_ID } from '../lib/team.js';
 import { titleize, formatPhone, dateOnly } from '../lib/format.js';
 import {
@@ -45,6 +46,11 @@ export default function BuyersPage() {
   // The count line says the view is filtered, so nobody thinks the list shrank.
   const [status, setStatus] = useState('active');
   const [county, setCounty] = useState('');
+  // City, because that is how this list is actually organised: of the 70 buyers
+  // imported from the previous CRM, 49 carry target cities and 6 carry a
+  // county. Filtering by county alone hides most of the book.
+  const [city, setCity] = useState('');
+  const [minRating, setMinRating] = useState('');
   const [texting, setTexting] = useState('');
   const [sort, setSort] = useState('track');
   const [adding, setAdding] = useState(false);
@@ -109,6 +115,17 @@ export default function BuyersPage() {
    * to the matcher, so offering them as two filter options would be this page
    * inventing a distinction the database does not make.
    */
+  const cities = useMemo(() => {
+    const seen = new Map();
+    for (const b of buyers) {
+      for (const c of b.cities || []) {
+        const key = c.trim().toLowerCase();
+        if (key && !seen.has(key)) seen.set(key, c.trim());
+      }
+    }
+    return [...seen.values()].sort((a, b) => a.localeCompare(b));
+  }, [buyers]);
+
   const counties = useMemo(() => {
     const seen = new Map();
     for (const b of buyers) {
@@ -123,6 +140,8 @@ export default function BuyersPage() {
   const shown = useMemo(() => {
     const needle = q.trim().toLowerCase();
     const wantCounty = county.trim().toLowerCase();
+    const wantCity = city.trim().toLowerCase();
+    const wantRating = minRating === '' ? null : Number(minRating);
 
     const rows = buyers.filter((b) => {
       if (status && b.status !== status) return false;
@@ -136,9 +155,14 @@ export default function BuyersPage() {
       if (texting === 'yes' && textingBlock(b) !== null) return false;
       if (texting === 'no' && textingBlock(b) === null) return false;
       if (wantCounty && !(b.counties || []).some((c) => c.trim().toLowerCase() === wantCounty)) return false;
+      if (wantCity && !(b.cities || []).some((c) => c.trim().toLowerCase() === wantCity)) return false;
+      // An unrated buyer fails a minimum rather than passing it. "3 and up"
+      // asked for buyers you have vouched for, and a blank rating is the
+      // absence of that judgement, not a passing one.
+      if (wantRating !== null && !(b.rating >= wantRating)) return false;
       if (!needle) return true;
       return [b.name, b.entity_name, b.email, b.phone, b.phone_secondary, b.notes,
-        ...(b.counties || []), ...(b.zips || []), ...(b.property_types || [])]
+        ...(b.counties || []), ...(b.cities || []), ...(b.zips || []), ...(b.property_types || [])]
         .filter(Boolean)
         .some((v) => String(v).toLowerCase().includes(needle));
     });
@@ -147,7 +171,7 @@ export default function BuyersPage() {
     // reorder `buyers` behind the memo and make the next render disagree with
     // this one.
     return [...rows].sort(COMPARATORS[sort] || COMPARATORS.name);
-  }, [buyers, q, status, county, texting, sort]);
+  }, [buyers, q, status, county, city, minRating, texting, sort]);
 
   // Counted over what is on screen, not over the whole list. The number is read
   // as "how big is the audience I am looking at", and answering it about a set
@@ -196,6 +220,16 @@ export default function BuyersPage() {
             {counties.map((c) => <option key={c} value={c}>{c}</option>)}
           </select>
         )}
+        {cities.length > 0 && (
+          <select value={city} onChange={(e) => setCity(e.target.value)}>
+            <option value="">Any city</option>
+            {cities.map((c) => <option key={c} value={c}>{titleize(c)}</option>)}
+          </select>
+        )}
+        <select value={minRating} onChange={(e) => setMinRating(e.target.value)}>
+          <option value="">Any rating</option>
+          {[5, 4, 3, 2].map((r) => <option key={r} value={r}>{r} stars and up</option>)}
+        </select>
         <select value={texting} onChange={(e) => setTexting(e.target.value)}>
           <option value="">Textable or not</option>
           <option value="yes">Textable now</option>
@@ -216,7 +250,12 @@ export default function BuyersPage() {
       <div className="card">
         {/* No onDone: the buyers realtime channel above reloads on any UPDATE
             to the table, and a trash is exactly that. */}
-        <BulkBar table="buyers" sel={sel} onError={setErr} />
+        <BulkBar
+          table="buyers"
+          sel={sel}
+          onError={setErr}
+          onText={(ids) => { stashSelection('buyers', ids); navigate('/campaigns'); }}
+        />
         {shown.length === 0 ? (
           <div className="empty">
             <strong>{buyers.length ? 'Nothing matches those filters' : 'No buyers yet'}</strong>

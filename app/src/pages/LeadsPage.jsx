@@ -4,6 +4,7 @@ import { navigate } from '../router.js';
 import { STATUSES, TEMPERATURES, titleize, formatPhone, fullAddress, timeAgo } from '../lib/format.js';
 import useBulkSelect from '../lib/useBulkSelect.js';
 import BulkBar from '../components/BulkBar.jsx';
+import { stashSelection } from '../lib/campaignHandoff.js';
 
 /**
  * Leads — one page, two views.
@@ -23,6 +24,13 @@ import BulkBar from '../components/BulkBar.jsx';
  */
 const VIEW_KEY = 'tossie.leads.view';
 
+/**
+ * Mirrors LEADS_CAP in CampaignsPage, which mirrors what materialise_campaign
+ * enforces. Checked here so the operator finds out before they change screens,
+ * not after composing a message.
+ */
+const LEADS_CAP = 250;
+
 export default function LeadsPage({ initialView = 'list' }) {
   const [view, setView] = useState(() => {
     // The deep link wins on arrival, otherwise honour whatever they last chose.
@@ -39,6 +47,11 @@ export default function LeadsPage({ initialView = 'list' }) {
   const [q, setQ] = useState('');
   const [status, setStatus] = useState('');
   const [temp, setTemp] = useState('');
+  const [source, setSource] = useState('');
+  // Textable, not "has a phone". The database computes lead_is_dialable off the
+  // consent basis and the suppression list, and picking an SMS audience by any
+  // looser test just fills the campaign preview with suppressed rows.
+  const [textable, setTextable] = useState('');
 
   const [dragging, setDragging] = useState(null);
   const [over, setOver] = useState(null);
@@ -55,7 +68,11 @@ export default function LeadsPage({ initialView = 'list' }) {
     const [{ data: rows, error: lErr }, stageRes, memRes] = await Promise.all([
       supabase
         .from('leads')
-        .select('*')
+        // dialable:lead_is_dialable is the database function as a computed
+        // column — the same one the dialer and the send path consult. The
+        // "textable" filter must not re-derive that rule in JavaScript: half of
+        // it reads telephony_opt_outs and is not expressible here at all.
+        .select('*, dialable:lead_is_dialable')
         .eq('trashed', false)
         .order('created_at', { ascending: false })
         // 500 was already tight after one CRM import. This is the whole book of
@@ -99,12 +116,22 @@ export default function LeadsPage({ initialView = 'list' }) {
     return leads.filter((l) => {
       if (status && l.status !== status) return false;
       if (temp && l.temperature !== temp) return false;
+      if (source && l.source !== source) return false;
+      if (textable === 'yes' && !l.dialable) return false;
+      if (textable === 'no' && l.dialable) return false;
       if (!needle) return true;
       return [l.name, l.address, l.city, l.zip, l.phone, l.phone_mobile, l.email, l.owner_name]
         .filter(Boolean)
         .some((v) => String(v).toLowerCase().includes(needle));
     });
-  }, [leads, q, status, temp]);
+  }, [leads, q, status, temp, source, textable]);
+
+  // Read off the rows rather than hardcoded: sources arrive from imports and
+  // webhooks, so any fixed list goes stale the first time a new vendor is added.
+  const sources = useMemo(
+    () => [...new Set(leads.map((l) => l.source).filter(Boolean))].sort(),
+    [leads],
+  );
 
   const byStage = useMemo(() => {
     const grouped = {};
@@ -190,6 +217,15 @@ export default function LeadsPage({ initialView = 'list' }) {
           <option value="">Any temperature</option>
           {TEMPERATURES.map((t) => <option key={t} value={t}>{titleize(t)}</option>)}
         </select>
+        <select value={source} onChange={(e) => setSource(e.target.value)}>
+          <option value="">Any source</option>
+          {sources.map((s) => <option key={s} value={s}>{titleize(s)}</option>)}
+        </select>
+        <select value={textable} onChange={(e) => setTextable(e.target.value)}>
+          <option value="">Textable or not</option>
+          <option value="yes">Textable now</option>
+          <option value="no">Not textable</option>
+        </select>
       </div>
 
       {view === 'board'
@@ -253,7 +289,16 @@ export default function LeadsPage({ initialView = 'list' }) {
         )
         : (
           <div className="card">
-            <BulkBar table="leads" sel={sel} onDone={load} onError={setErr} />
+            <BulkBar
+              table="leads"
+              sel={sel}
+              onDone={load}
+              onError={setErr}
+              onText={(ids) => { stashSelection('leads', ids); navigate('/campaigns'); }}
+              textBlocked={sel.count > LEADS_CAP
+                ? `Too many to text — ${sel.count} selected, ${LEADS_CAP} is the cap on a seller audience`
+                : null}
+            />
             {shown.length === 0 ? (
               <div className="empty">
                 <strong>{leads.length ? 'Nothing matches those filters' : 'No leads yet'}</strong>

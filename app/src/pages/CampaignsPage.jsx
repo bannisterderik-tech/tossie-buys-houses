@@ -4,6 +4,7 @@ import { TEAM_ID } from '../lib/team.js';
 import { formatPhone, timeAgo, fullDate, titleize } from '../lib/format.js';
 import { money } from '../lib/buyers.js';
 import { MAX_BODY, explainRefusal } from '../lib/sms-refusals.js';
+import { takeSelection } from '../lib/campaignHandoff.js';
 
 /**
  * Bulk SMS campaigns.
@@ -393,6 +394,24 @@ export default function CampaignsPage() {
 
   const reloadTimer = useRef(null);
 
+  /**
+   * A selection handed over from the Leads or Buyers page.
+   *
+   * Read once, on mount, so a refresh of this screen does not silently rebuild
+   * an audience the operator already walked away from. It pre-fills who, and
+   * deliberately nothing else: for a seller audience the acknowledgement on
+   * LEADS_WARNING still has to be ticked here, because arriving with 40 rows
+   * already selected is exactly the moment somebody is least likely to stop and
+   * read what a seller blast does to a Low Volume Mixed registration.
+   */
+  const [handoff, setHandoff] = useState(null);
+  useEffect(() => {
+    const sel = takeSelection();
+    if (!sel) return;
+    setHandoff(sel);
+    setBuilding(true);
+  }, []);
+
   const load = useCallback(async () => {
     const { data, error } = await supabase
       .from('broadcast_campaigns')
@@ -476,7 +495,8 @@ export default function CampaignsPage() {
       {building ? (
         <Builder
           userId={userId}
-          onCancel={() => setBuilding(false)}
+          handoff={handoff}
+          onCancel={() => { setHandoff(null); setBuilding(false); }}
           onBuilt={(id) => { setBuilding(false); setOpenId(id); load(); }}
         />
       ) : open ? (
@@ -714,8 +734,8 @@ function StatusBadge({ status }) {
  * somebody ends up looking for the audience that fits a message they have
  * already fallen in love with.
  */
-function Builder({ userId, onCancel, onBuilt }) {
-  const [kind, setKind] = useState('deal_match');
+function Builder({ userId, handoff, onCancel, onBuilt }) {
+  const [kind, setKind] = useState(() => (handoff?.kind === 'buyers' ? 'buyers' : handoff?.kind === 'leads' ? 'leads' : 'deal_match'));
   const [name, setName] = useState('');
   const [body, setBody] = useState('');
   const [busy, setBusy] = useState(false);
@@ -737,6 +757,33 @@ function Builder({ userId, onCancel, onBuilt }) {
   // leads
   const [leadsAck, setLeadsAck] = useState(false);
   const [pickedLeads, setPickedLeads] = useState([]);
+
+  /**
+   * Turn a handed-over set of ids into the rows the pickers render.
+   *
+   * Buyers are ids already. Leads are objects, because the picker shows a name
+   * and address next to each checkbox — so those get read back, capped at
+   * LEADS_CAP, and filtered to what still exists. A lead deleted between the
+   * two screens should quietly not be in the audience rather than become an id
+   * materialise_campaign later cannot resolve.
+   */
+  useEffect(() => {
+    if (!handoff) return;
+    if (handoff.kind === 'buyers') { setPickedBuyers(handoff.ids); return; }
+    if (handoff.kind !== 'leads') return;
+    let cancelled = false;
+    supabase
+      .from('leads')
+      .select('id, name, address, city, state, zip, phone, phone_mobile')
+      .in('id', handoff.ids.slice(0, LEADS_CAP))
+      .eq('trashed', false)
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        if (error) { setErr(error.message); return; }
+        setPickedLeads(data ?? []);
+      });
+    return () => { cancelled = true; };
+  }, [handoff]);
 
   useEffect(() => {
     /**
@@ -976,6 +1023,22 @@ function Builder({ userId, onCancel, onBuilt }) {
 
   return (
     <>
+      {handoff && (
+        <div className="notice">
+          <strong>
+            {handoff.kind === 'leads'
+              ? `${pickedLeads.length} of ${handoff.ids.length} selected sellers carried over.`
+              : `${handoff.ids.length} selected buyers carried over.`}
+          </strong>
+          {handoff.kind === 'leads' && handoff.ids.length > pickedLeads.length && (
+            handoff.ids.length > LEADS_CAP
+              ? ` The cap on a seller audience is ${LEADS_CAP}; the rest were dropped.`
+              : ' The rest were deleted between the two screens and were dropped.'
+          )}
+          {' '}Who is filled in — the message, and the acknowledgement below, are not.
+        </div>
+      )}
+
       <div className="card">
         <h2>Who is this going to</h2>
         <div className="body">

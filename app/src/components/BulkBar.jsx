@@ -8,7 +8,7 @@ import { trash, countLabel } from '../lib/trash.js';
  * delete does: the number here can be three hundred, and a bare "Are you sure?"
  * is not enough information to answer.
  */
-export default function BulkBar({ table, sel, onDone, onError }) {
+export default function BulkBar({ table, sel, onDone, onError, onText, textBlocked }) {
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -40,6 +40,14 @@ export default function BulkBar({ table, sel, onDone, onError }) {
         </span>
       ) : (
         <>
+          {onText && (
+            textBlocked
+              // Disabled with the reason attached rather than hidden. A button
+              // that vanishes at 251 rows reads as a bug; one that says why
+              // reads as a limit.
+              ? <span className="sub" title={textBlocked}>{textBlocked}</span>
+              : <button className="btn" onClick={() => onText(sel.ids)}>Text selected</button>
+          )}
           <button className="btn ghost danger" onClick={() => setConfirming(true)}>Delete</button>
           <button className="btn ghost" onClick={sel.clear}>Clear</button>
         </>
