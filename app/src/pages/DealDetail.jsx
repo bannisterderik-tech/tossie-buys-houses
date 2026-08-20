@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../supabase.js';
 import InlineField from '../components/InlineField.jsx';
 import DeleteButton from '../components/DeleteButton.jsx';
+import PhotoGallery from '../components/PhotoGallery.jsx';
 import { navigate } from '../router.js';
 import {
   DEAL_STATUSES, OCCUPANCY, dealStatusLabel,
@@ -199,6 +200,11 @@ export default function DealDetail({ id }) {
           <Dates deal={deal} milestones={milestones} patch={patch} patchNumber={patchNumber}
                  patchCount={patchCount} onDone={load} onErr={setErr} />
           <Property deal={deal} patch={patch} patchNumber={patchNumber} />
+          {/* Above the documents on purpose: a buyer asks what the house looks
+              like long before anybody asks for the settlement statement. Any
+              photos gathered while this was a lead are already in here — the
+              trigger on deals stamped them when this record was created. */}
+          <PhotoGallery subject="deal" subjectId={deal.id} teamId={deal.team_id} />
           <Documents deal={deal} docs={docs} onDone={load} onErr={setErr} />
           <Events events={events} />
         </div>
