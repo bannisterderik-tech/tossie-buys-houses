@@ -127,8 +127,14 @@ export function callBlock(p, optOuts = []) {
 
   if (p.converted_at) return 'Already a lead — work it there';
   if (!(p.phone_mobile || p.phone_landline || p.phone_voip)) return 'No number on file';
-  if (!p.skip_traced) return 'Not skip traced';
-  if (!p.dnc_scrubbed) return 'Not DNC scrubbed';
+  // A number the owner handed over takes the other branch of
+  // prospect_is_callable and needs neither of these. Reporting "not skip
+  // traced" for such a row would name a step that is not the blocker and send
+  // the operator off to run a trace that would change nothing.
+  if (!p.phone_from_owner) {
+    if (!p.skip_traced) return 'Not skip traced';
+    if (!p.dnc_scrubbed) return 'Not DNC scrubbed';
+  }
   if (p.is_litigator) return 'Known TCPA litigator';
   if (p.is_dnc) return 'On the do-not-call list';
 

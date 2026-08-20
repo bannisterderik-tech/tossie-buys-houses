@@ -270,3 +270,70 @@
 @media (max-width: 900px) {
   .pr-num .pr-kind { width: auto; }
 }
+
+/* ── adding a number by hand ─────────────────────────────────────────────── */
+
+.pr-addnum { margin-top: 12px; }
+
+.pr-editnum {
+  margin-left: 10px;
+  font-size: 0.78rem;
+  color: var(--muted);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.pr-editnum:hover { color: var(--navy); }
+
+.pr-phoneform {
+  margin-top: 13px;
+  padding: 13px;
+  border: 1px solid var(--line, #dde3ec);
+  border-radius: 9px;
+  background: var(--wash, #f7f9fc);
+}
+.pr-phonerow { display: flex; gap: 8px; flex-wrap: wrap; }
+.pr-phonerow select { padding: 7px 9px; border: 1px solid var(--line, #dde3ec); border-radius: 7px; }
+.pr-phoneinput {
+  flex: 1; min-width: 170px;
+  padding: 7px 10px;
+  border: 1px solid var(--line, #dde3ec); border-radius: 7px;
+  font-size: 0.95rem;
+  /* Tabular figures so a number does not reflow as it is typed. */
+  font-variant-numeric: tabular-nums;
+}
+.pr-phonelabel { display: block; margin-top: 11px; font-size: 0.84rem; color: var(--body); }
+.pr-phonelabel select {
+  display: block; width: 100%; margin-top: 5px;
+  padding: 7px 9px; border: 1px solid var(--line, #dde3ec); border-radius: 7px;
+}
+
+/* The consequence of the choice, stated before the choice is committed. Amber
+   is the default because "still needs the scrub" is the answer for most
+   sources and the one that must not read as an error. */
+.pr-consequence {
+  margin: 11px 0 0;
+  padding: 9px 11px;
+  border-radius: 7px;
+  font-size: 0.83rem;
+  line-height: 1.45;
+  background: #fef4e0; color: #6b4c00; border: 1px solid #f5dfa8;
+}
+.pr-consequence.ok { background: #e6f4ea; color: #0b6b34; border-color: #b7e0c4; }
+.pr-consequence strong { display: block; margin-bottom: 2px; }
+
+.pr-phoneactions {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+/* ── provenance, on the card that explains where numbers came from ───────── */
+.pr-prov {
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid #f5dfa8;
+  background: #fef4e0;
+}
+.pr-prov.ok { border-color: #b7e0c4; background: #e6f4ea; }
+.pr-prov .pr-kind { display: block; margin-bottom: 3px; }
+.pr-prov strong { display: block; font-size: 0.92rem; }
+.pr-prov .fine { display: block; margin-top: 3px; }

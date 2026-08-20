@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '../supabase.js';
 import { navigate } from '../router.js';
 import DeleteButton from '../components/DeleteButton.jsx';
+import PropertyLinks from '../components/PropertyLinks.jsx';
 import { callingWindow } from '../lib/calling-window.js';
 import { dateOnly, formatPhone, fullDate, timeAgo, titleize } from '../lib/format.js';
 import {
@@ -244,6 +245,18 @@ export default function ProspectDetail({ id }) {
                     : '—'}
                 </dd>
               </dl>
+
+              {/* The same six links the lead page carries, and for the same
+                  reason: the first thing anyone does with a cold address is
+                  look at the street, then the comps, then what the county says
+                  it is. Doing that by hand is five tab-opens and five
+                  retypings of the address, and the retyping is where the wrong
+                  house comes from. PropertyLinks was written to take a row
+                  rather than four props precisely so a prospect works
+                  unchanged — prospects carry the same address/city/state/zip/
+                  county column names as leads. It simply had never been
+                  mounted here. */}
+              <PropertyLinks place={p} />
             </div>
           </div>
 
@@ -543,36 +556,57 @@ function AlreadyConverted({ p }) {
  * Prefer over-blocking.
  */
 function CallCard({ p, block, optOuts, tick, onDone }) {
+  const [editing, setEditing] = useState(null);
   const lines = [
-    { kind: 'Mobile', number: p.phone_mobile },
-    { kind: 'Landline', number: p.phone_landline },
-    { kind: 'VoIP', number: p.phone_voip },
-  ].filter((l) => l.number);
+    { kind: 'Mobile', key: 'mobile', number: p.phone_mobile },
+    { kind: 'Landline', key: 'landline', number: p.phone_landline },
+    { kind: 'VoIP', key: 'voip', number: p.phone_voip },
+  ];
+  const onFile = lines.filter((l) => l.number);
+  const firstFree = lines.find((l) => !l.number)?.key ?? 'mobile';
 
   return (
     <div className="card">
       <h2>Call</h2>
       <div className="body">
-        {lines.length === 0 ? (
+        {onFile.length === 0 ? (
           <div className="empty" style={{ padding: '22px 10px' }}>
-            <strong>{p.skip_traced ? 'Skip traced, no number found' : 'Not skip traced yet'}</strong>
+            <strong>{p.skip_traced ? 'Skip traced, no number found' : 'No number on this row yet'}</strong>
             {p.skip_traced
-              ? 'The trace ran and came back empty. Nothing on this row can be called, and converting it would fail — the RPC refuses a prospect with neither a phone nor an email.'
-              : 'A purchased list carries an address and a name. The phone number comes from a skip trace, and the DNC and litigator scrub has to follow it before anything here may be dialed.'}
+              ? 'The trace ran and came back empty. Converting would fail too — the RPC refuses a prospect with neither a phone nor an email. If you get a number another way, add it below.'
+              : 'A purchased list carries an address and a name, not a phone number. A skip trace is how the whole list gets numbers at once — but if you already have this one, type it in.'}
           </div>
         ) : (
           <div className="pr-nums">
-            {lines.map((l) => (
-              <NumberRow key={l.kind} p={p} line={l} block={block} optOuts={optOuts} tick={tick} />
+            {onFile.map((l) => (
+              <NumberRow
+                key={l.kind}
+                p={p}
+                line={l}
+                block={block}
+                optOuts={optOuts}
+                tick={tick}
+                onEdit={() => setEditing(l.key)}
+              />
             ))}
           </div>
         )}
 
-        {block && lines.length > 0 && (
+        {editing
+          ? <PhoneEditor p={p} kind={editing} onDone={onDone} onClose={() => setEditing(null)} />
+          : (
+            <button className="btn ghost pr-addnum" onClick={() => setEditing(firstFree)}>
+              {onFile.length === 0 ? 'Add a number' : 'Add or edit a number'}
+            </button>
+          )}
+
+        {block && onFile.length > 0 && (
           <div className="notice" style={{ marginTop: 13 }}>
             <strong>Not dialable: {block}.</strong>
-            prospect_is_callable() refuses this row, and it is the same function the queue reads. The
-            controls that would change it are a skip trace and a scrub, not anything on this page.
+            prospect_is_callable() refuses this row, and it is the same function the queue reads.
+            {p.phone_from_owner
+              ? ' The owner gave us this number, so no scrub is required — something else on the row is the veto.'
+              : ' A scrub, or a number the owner gave us themselves, are the two things that change it.'}
           </div>
         )}
 
@@ -588,7 +622,7 @@ function CallCard({ p, block, optOuts, tick, onDone }) {
   );
 }
 
-function NumberRow({ p, line, block, optOuts, tick }) {
+function NumberRow({ p, line, block, optOuts, tick, onEdit }) {
   // The number about to be dialed, not the row's best number: callingWindow()
   // resolves the zone from the area code it is handed, and handing it the
   // mobile while the operator dials the landline would answer a question nobody
@@ -627,6 +661,173 @@ function NumberRow({ p, line, block, optOuts, tick }) {
           {suppressed ? 'Opted out' : block ? 'Blocked' : win.reason === 'unknown_timezone' ? 'Unknown zone' : 'Outside hours'}
         </span>
       )}
+      {onEdit && <button className="linkbtn pr-editnum" onClick={onEdit}>edit</button>}
+    </div>
+  );
+}
+
+/**
+ * A number typed in by hand, and the one question that has to come with it.
+ *
+ * Where the number came from is not paperwork, it is the whole difference
+ * between a callback and a cold call. Someone who rang the sign in their own
+ * front yard has made an inquiry; calling them back is not telemarketing and
+ * waiting on a skip trace to reach them would be absurd. A number found on a
+ * people-search site is the opposite — nobody has checked it against the DNC or
+ * the litigator files, and those files are exactly where the expensive mistakes
+ * live.
+ *
+ * So the source is required, it is stored on the row, and it decides which of
+ * the two branches of prospect_is_callable this prospect takes. The consequence
+ * is shown live under the picker rather than discovered afterwards, because an
+ * operator choosing between "they called us" and "found online" should know
+ * what each one does before they choose, not after.
+ *
+ * The list is deliberately short and written in the words somebody would
+ * actually use. A free-text box would collect "phone" and "from Sarah", which
+ * answer nothing a year later.
+ */
+const PHONE_SOURCES = [
+  { group: 'They gave it to us', owner: true, options: [
+    'They called us',
+    'They called the sign or the ad',
+    'They gave it to us at the property',
+    'On a letter or agreement they sent',
+  ] },
+  { group: 'We went and found it', owner: false, options: [
+    'Public record or county file',
+    'Found online',
+    'A neighbour or relative gave it',
+    'Another list we already own',
+  ] },
+];
+
+const LINE_KINDS = [
+  { key: 'mobile', label: 'Mobile' },
+  { key: 'landline', label: 'Landline' },
+  { key: 'voip', label: 'VoIP' },
+];
+
+function sourceIsFromOwner(source) {
+  return PHONE_SOURCES.some((g) => g.owner && g.options.includes(source));
+}
+
+function PhoneEditor({ p, kind, onDone, onClose }) {
+  const existing = { mobile: p.phone_mobile, landline: p.phone_landline, voip: p.phone_voip };
+  const [line, setLine] = useState(kind);
+  const [number, setNumber] = useState(existing[kind] ?? '');
+  const [source, setSource] = useState(p.phone_source ?? '');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+
+  // Switching line re-seeds the number so the field always shows what is
+  // actually on that line — otherwise picking "Landline" while the mobile is
+  // in the box would overwrite the landline with the mobile's digits.
+  function pickLine(next) {
+    setLine(next);
+    setNumber(existing[next] ?? '');
+  }
+
+  const digits = number.replace(/\D/g, '').length;
+  const fromOwner = sourceIsFromOwner(source);
+  const canSave = digits >= 10 && digits <= 15 && source !== '';
+
+  async function save() {
+    setBusy(true);
+    setErr(null);
+    const { error } = await supabase.rpc('set_prospect_phone', {
+      p_prospect_id: p.id,
+      p_kind: line,
+      p_number: number,
+      p_source: source,
+      p_from_owner: fromOwner,
+    });
+    setBusy(false);
+    if (error) { setErr(error.message); return; }
+    await onDone();
+    onClose();
+  }
+
+  async function clear() {
+    if (!window.confirm(`Remove the ${line} number from this prospect?`)) return;
+    setBusy(true);
+    setErr(null);
+    // Null clears the line. The RPC drops the provenance too once nothing
+    // hand-entered is left, so the row cannot go on claiming an owner gave us
+    // a number it no longer has.
+    const { error } = await supabase.rpc('set_prospect_phone', {
+      p_prospect_id: p.id, p_kind: line, p_number: null, p_source: null, p_from_owner: false,
+    });
+    setBusy(false);
+    if (error) { setErr(error.message); return; }
+    await onDone();
+    onClose();
+  }
+
+  return (
+    <div className="pr-phoneform">
+      {err && <div className="err">{err}</div>}
+
+      <div className="pr-phonerow">
+        <select value={line} disabled={busy} onChange={(e) => pickLine(e.target.value)}>
+          {LINE_KINDS.map((k) => (
+            <option key={k.key} value={k.key}>
+              {k.label}{existing[k.key] ? ' · has one' : ''}
+            </option>
+          ))}
+        </select>
+        <input
+          className="pr-phoneinput"
+          value={number}
+          disabled={busy}
+          inputMode="tel"
+          placeholder="(912) 555-0134"
+          onChange={(e) => setNumber(e.target.value)}
+        />
+      </div>
+
+      <label className="pr-phonelabel">
+        Where did this number come from?
+        <select value={source} disabled={busy} onChange={(e) => setSource(e.target.value)}>
+          <option value="">Choose one…</option>
+          {PHONE_SOURCES.map((g) => (
+            <optgroup key={g.group} label={g.group}>
+              {g.options.map((o) => <option key={o} value={o}>{o}</option>)}
+            </optgroup>
+          ))}
+        </select>
+      </label>
+
+      {source !== '' && (
+        <p className={`pr-consequence${fromOwner ? ' ok' : ''}`}>
+          {fromOwner ? (
+            <>
+              <strong>Callable straight away.</strong> They reached out, so this is a callback and
+              not cold outreach — no skip trace needed. A DNC hit, a litigator hit, or a recorded
+              &ldquo;stop calling me&rdquo; still block it.
+            </>
+          ) : (
+            <>
+              <strong>Still needs the DNC scrub.</strong> Nobody has checked this number against the
+              do-not-call and litigator files, and serial TCPA plaintiffs seed their numbers onto
+              lists like this one deliberately. It saves now and dials once the scrub runs.
+            </>
+          )}
+        </p>
+      )}
+
+      <div className="pr-phoneactions">
+        <button className="btn" disabled={!canSave || busy} onClick={save}>
+          {busy ? 'Saving…' : 'Save number'}
+        </button>
+        {existing[line] && (
+          <button className="btn ghost danger" disabled={busy} onClick={clear}>Remove</button>
+        )}
+        <button className="btn ghost" disabled={busy} onClick={onClose}>Cancel</button>
+        {number !== '' && digits < 10 && (
+          <span className="fine">{digits} digits — a US number has ten.</span>
+        )}
+      </div>
     </div>
   );
 }
@@ -804,12 +1005,29 @@ function SkipTraceCard({ p, optOuts }) {
 
   return (
     <div className="card">
-      <h2>Skip trace</h2>
+      <h2>Where the numbers came from</h2>
       <div className="body">
+        {/* Hand-entered provenance sits above the trace, not inside it: a
+            number an operator typed in did not come from a vendor, and filing
+            it under "skip trace" would misattribute the one fact on this card
+            that decides whether the row may be dialed without a scrub. */}
+        {p.phone_source && (
+          <div className={`pr-prov${p.phone_from_owner ? ' ok' : ''}`}>
+            <span className="pr-kind">Added by hand</span>
+            <strong>{p.phone_source}</strong>
+            <span className="fine">
+              {p.phone_source_at ? `${tsDate(p.phone_source_at)} · ${timeAgo(p.phone_source_at)}` : ''}
+              {p.phone_from_owner
+                ? ' — the owner gave it to us, so this row dials without a trace.'
+                : ' — found rather than given, so it still waits on the scrub.'}
+            </span>
+          </div>
+        )}
+
         {!p.skip_traced ? (
-          <p className="fine" style={{ margin: 0 }}>
-            Not traced. A bought list carries an address and a name; the numbers below are what a
-            trace adds, and nothing may be dialed before it runs.
+          <p className="fine" style={{ margin: p.phone_source ? '12px 0 0' : 0 }}>
+            No skip trace has run. A bought list carries an address and a name; a trace is what adds
+            numbers to the whole list at once.
           </p>
         ) : (
           <>
