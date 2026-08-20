@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '../supabase.js';
 import { navigate } from '../router.js';
 import DispositionBar from '../components/DispositionBar.jsx';
+import DialCampaigns from '../components/DialCampaigns.jsx';
+import BuyerOnDeck from '../components/BuyerOnDeck.jsx';
 import { SoftphoneControl, SoftphoneNotice, useSoftphone } from '../components/Softphone.jsx';
 import { callingWindow } from '../lib/calling-window.js';
 import { formatPhone, fullAddress, titleize, timeAgo, fullDate } from '../lib/format.js';
@@ -52,6 +54,15 @@ const PEEK = 25;
 export default function DialerPage() {
   const [rows, setRows] = useState([]);
   const [optedOut, setOptedOut] = useState(() => new Set());
+
+  /**
+   * Which list is being worked. null = the untargeted queue: everything due
+   * plus everything never scheduled, which stays the default because most
+   * sessions have no subject beyond "who owes me a call today".
+   */
+  const [campaignId, setCampaignId] = useState(null);
+  const [campaign, setCampaign] = useState(null);
+  const [members, setMembers] = useState([]);
   const [pos, setPos] = useState(0);
   const [logged, setLogged] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -123,8 +134,59 @@ export default function DialerPage() {
 
   useEffect(() => { load(); }, [load]);
 
-  const queue = useMemo(() => rows.filter((l) => l.dialable), [rows]);
-  const blocked = useMemo(() => rows.filter((l) => !l.dialable), [rows]);
+  /**
+   * A campaign's queue is its frozen members, not a fresh query.
+   *
+   * Pending only: rows that were uncallable at build time are already 'skipped'
+   * and rows that were worked are 'called', so reopening a list resumes where
+   * the session left off instead of starting at the top again.
+   */
+  const loadCampaign = useCallback(async () => {
+    if (!campaignId) { setCampaign(null); setMembers([]); return; }
+    setLoading(true);
+    const { data: c, error: cErr } = await supabase
+      .from('dial_campaigns')
+      .select('*, deals(id, address, city, state, contract_price, beds, baths, sqft)')
+      .eq('id', campaignId)
+      .single();
+    if (cErr) { setErr(cErr.message); setLoading(false); return; }
+
+    const sel = c.kind === 'buyers'
+      ? '*, buyers(*)'
+      : '*, leads(*, dialable:lead_is_dialable)';
+    const { data: m, error: mErr } = await supabase
+      .from('dial_campaign_members')
+      .select(sel)
+      .eq('campaign_id', campaignId)
+      .eq('status', 'pending')
+      .order('position');
+    if (mErr) setErr(mErr.message);
+
+    setCampaign(c);
+    setMembers(m ?? []);
+    setPos(0);
+    setLoading(false);
+  }, [campaignId]);
+
+  useEffect(() => { loadCampaign(); }, [loadCampaign]);
+
+  // In a seller campaign the members carry the lead; the rest of this page
+  // only ever knew about leads, so unwrap and everything downstream is unchanged.
+  const campaignLeads = useMemo(
+    () => (campaign?.kind === 'sellers' ? members.map((m) => ({ ...m.leads, _memberId: m.id })) : []),
+    [campaign, members],
+  );
+
+  const queue = useMemo(
+    () => (campaign?.kind === 'sellers'
+      ? campaignLeads.filter((l) => l?.dialable)
+      : campaign ? [] : rows.filter((l) => l.dialable)),
+    [campaign, campaignLeads, rows],
+  );
+  const blocked = useMemo(
+    () => (campaign ? [] : rows.filter((l) => !l.dialable)),
+    [campaign, rows],
+  );
 
   const current = queue[pos] ?? null;
 
@@ -133,14 +195,35 @@ export default function DialerPage() {
   // about and "3 of 40" keeps meaning what it says.
   const advance = () => setPos((p) => p + 1);
 
+  /**
+   * Record that this row was worked, so reopening the list resumes rather than
+   * restarting. Fire-and-forget on purpose: the call and its disposition are
+   * already written by the time this runs, and a failed bookkeeping write must
+   * not block the operator from moving to the next person.
+   */
+  function markWorked(outcome) {
+    const m = campaign?.kind === 'sellers'
+      ? members[pos]
+      : null;
+    const id = m?.id ?? current?._memberId;
+    if (!id) return;
+    supabase.from('dial_campaign_members')
+      .update({ status: 'called', called_at: new Date().toISOString(), outcome: outcome ?? null })
+      .eq('id', id)
+      .then(({ error }) => { if (error) setErr(error.message); });
+  }
+
   function afterDisposition() {
+    if (campaign) markWorked('dispositioned');
     setLogged((n) => n + 1);
     advance();
   }
 
   if (loading) return <div className="empty">Building the queue…</div>;
 
-  const remaining = Math.max(queue.length - pos, 0);
+  // A buyers list has no `queue` — its rows are the members themselves.
+  const remaining = Math.max(
+    (campaign?.kind === 'buyers' ? members.length : queue.length) - pos, 0);
 
   return (
     <>
@@ -148,6 +231,7 @@ export default function DialerPage() {
         <h1>Dialer</h1>
         <span className="count">
           {[
+            campaign && campaign.name,
             `${remaining} to call`,
             blocked.length > 0 && `${blocked.length} blocked`,
             logged > 0 && `${logged} logged`,
@@ -158,10 +242,40 @@ export default function DialerPage() {
       {err && <div className="err">{err}</div>}
 
       <div className="toolbar">
-        <button className="btn ghost" onClick={load}>Rebuild queue</button>
+        {campaign ? (
+          <>
+            <button className="btn ghost" onClick={() => setCampaignId(null)}>← All lists</button>
+            <button className="btn ghost" onClick={loadCampaign}>Reload list</button>
+          </>
+        ) : (
+          <button className="btn ghost" onClick={load}>Rebuild queue</button>
+        )}
       </div>
 
-      {current ? (
+      <DialCampaigns onOpen={setCampaignId} activeId={campaignId} />
+
+      {campaign?.kind === 'buyers' ? (
+        members[pos] ? (
+          <BuyerOnDeck
+            member={members[pos]}
+            buyer={members[pos].buyers}
+            deal={campaign.deals}
+            at={pos}
+            of={members.length}
+            onSkip={advance}
+            onLogged={() => { setLogged((n) => n + 1); advance(); }}
+          />
+        ) : (
+          <div className="card">
+            <div className="empty">
+              <strong>{members.length === 0 ? 'Nobody to call on this list' : 'List worked'}</strong>
+              {members.length === 0
+                ? 'Every matched buyer was blocked, or the buy-box score was set too high.'
+                : `${logged} logged this session.`}
+            </div>
+          </div>
+        )
+      ) : current ? (
         <OnDeck lead={current} at={pos} of={queue.length} now={now} sp={sp} onSkip={advance} onDone={afterDisposition} />
       ) : (
         <div className="card">

@@ -1159,3 +1159,18 @@ table.leads tr.picked { background: #eef3fb; }
   display: block; margin-top: 4px; padding: 7px 10px; min-width: 280px;
   border: 1.5px solid var(--line); border-radius: 8px; font-size: 0.9rem;
 }
+
+/* ── dial campaign builder ────────────────────────────────────────────── */
+.chipset { border: 0; padding: 0; margin: 12px 0 0; }
+.chipset legend { font-size: 0.82rem; font-weight: 700; color: var(--muted); padding: 0 0 6px; }
+.chipset .chip {
+  display: inline-flex; align-items: center; gap: 5px; cursor: pointer;
+  border: 1.5px solid var(--line); border-radius: 100px; padding: 4px 11px;
+  font-size: 0.82rem; margin: 0 6px 6px 0; background: #fff;
+}
+.chipset .chip.on { border-color: var(--navy); background: #eef3fb; font-weight: 600; }
+.chipset .chip input { margin: 0; }
+
+.dispobar { display: flex; gap: 7px; flex-wrap: wrap; margin-top: 12px; }
+.dispobar .btn.ok   { color: #1d7a45; border-color: currentColor; }
+.dispobar .btn.stop { color: var(--danger, #b4232a); border-color: currentColor; }
