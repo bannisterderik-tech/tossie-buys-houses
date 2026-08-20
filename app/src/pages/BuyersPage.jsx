@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../supabase.js';
 import { navigate } from '../router.js';
 import useBulkSelect from '../lib/useBulkSelect.js';
-import BulkBar from '../components/BulkBar.jsx';
+import BuyersBulkBar from '../components/BuyersBulkBar.jsx';
 import { stashSelection } from '../lib/campaignHandoff.js';
 import { TEAM_ID } from '../lib/team.js';
 import { titleize, formatPhone, dateOnly } from '../lib/format.js';
@@ -250,8 +250,9 @@ export default function BuyersPage() {
       <div className="card">
         {/* No onDone: the buyers realtime channel above reloads on any UPDATE
             to the table, and a trash is exactly that. */}
-        <BulkBar
-          table="buyers"
+        {/* No onDone reload: the buyers realtime channel above already fires on
+            any UPDATE to the table, which both consent and trash are. */}
+        <BuyersBulkBar
           sel={sel}
           onError={setErr}
           onText={(ids) => { stashSelection('buyers', ids); navigate('/campaigns'); }}

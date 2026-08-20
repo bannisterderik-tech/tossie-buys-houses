@@ -1149,3 +1149,13 @@ table.leads tr.picked { background: #eef3fb; }
 .followup-presets, .followup-exact { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
 .followup .btn { padding: 5px 11px; font-size: 0.82rem; }
 .followup .inline-input { max-width: 220px; }
+
+/* The consent form is a block, not a strip — it asks three questions. */
+.bulkbar.consentbulk { display: block; padding: 14px; }
+.bulkbar.consentbulk .fine { font-weight: 400; margin: 6px 0 10px; max-width: 62ch; }
+.bulkbar.consentbulk .consentfield { display: block; margin-bottom: 9px; font-weight: 600; font-size: 0.86rem; }
+.bulkbar.consentbulk .consentfield select,
+.bulkbar.consentbulk .consentfield input {
+  display: block; margin-top: 4px; padding: 7px 10px; min-width: 280px;
+  border: 1.5px solid var(--line); border-radius: 8px; font-size: 0.9rem;
+}
