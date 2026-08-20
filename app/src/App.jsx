@@ -20,6 +20,8 @@ import CampaignsPage from './pages/CampaignsPage.jsx';
 import ProspectsPage from './pages/ProspectsPage.jsx';
 import ProspectDetail from './pages/ProspectDetail.jsx';
 import TrashPage from './pages/TrashPage.jsx';
+import TeamPage from './pages/TeamPage.jsx';
+import { CapabilitiesProvider } from './lib/capabilities.jsx';
 
 export default function App() {
   const [session, setSession] = useState(null);
@@ -47,6 +49,7 @@ export default function App() {
   const prospectId = matchProspectId(path);
 
   return (
+    <CapabilitiesProvider>
     <Layout session={session}>
       {/* /leads/new is checked before the :id route so "new" is never read as
           a lead id — matchLeadId only accepts a UUID, but the order documents
@@ -91,6 +94,7 @@ export default function App() {
         // The other half of every delete button. Unrouted, "it moves to Trash"
         // is a promise with nowhere to keep it.
         : path === '/trash' ? <TrashPage />
+        : path === '/team' ? <TeamPage />
         // Leads and Board are one page with a view toggle. This stays as a deep
         // link so existing bookmarks land somewhere real; the key forces a
         // remount so arriving here actually selects the board, rather than
@@ -100,6 +104,7 @@ export default function App() {
         : path === '/' ? <LeadsPage />
         : <NotFound path={path} />}
     </Layout>
+    </CapabilitiesProvider>
   );
 }
 

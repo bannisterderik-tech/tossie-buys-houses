@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { supabase } from '../supabase.js';
 import { trash, countLabel } from '../lib/trash.js';
 import { BUYER_CONSENT_SOURCES } from '../lib/buyers.js';
+import { useCan } from '../lib/capabilities.jsx';
 
 /**
  * Bulk actions for buyers: text, record consent, delete.
@@ -30,6 +31,7 @@ export default function BuyersBulkBar({ sel, onDone, onError, onText }) {
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState(null);
+  const { can } = useCan();
 
   if (sel.count === 0) return null;
 
@@ -136,9 +138,15 @@ export default function BuyersBulkBar({ sel, onDone, onError, onText }) {
   return (
     <div className="bulkbar">
       <span>{countLabel('buyers', sel.count)} selected</span>
-      <button className="btn" onClick={() => onText(sel.ids)}>Text selected</button>
-      <button className="btn ghost" onClick={() => setMode('consent')}>Record consent…</button>
-      <button className="btn ghost danger" onClick={() => setMode('delete')}>Delete</button>
+      {can('messages.send') && (
+        <button className="btn" onClick={() => onText(sel.ids)}>Text selected</button>
+      )}
+      {can('buyers.edit') && (
+        <button className="btn ghost" onClick={() => setMode('consent')}>Record consent…</button>
+      )}
+      {can('buyers.delete') && (
+        <button className="btn ghost danger" onClick={() => setMode('delete')}>Delete</button>
+      )}
       <button className="btn ghost" onClick={sel.clear}>Clear</button>
     </div>
   );

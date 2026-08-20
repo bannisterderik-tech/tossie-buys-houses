@@ -5,6 +5,7 @@ import { formatPhone, timeAgo, fullDate, titleize } from '../lib/format.js';
 import { money } from '../lib/buyers.js';
 import { MAX_BODY, explainRefusal } from '../lib/sms-refusals.js';
 import { takeSelection } from '../lib/campaignHandoff.js';
+import { useCan } from '../lib/capabilities.jsx';
 
 /**
  * Bulk SMS campaigns.
@@ -595,6 +596,7 @@ function SendingStateBanner({ teamKill, settings, numbers }) {
 /* ── the list ─────────────────────────────────────────────────────────────── */
 
 function CampaignList({ campaigns, onOpen, onNew, onDeleted }) {
+  const { can } = useCan();
   return (
     <div className="card">
       <h2>Campaigns</h2>
@@ -603,7 +605,9 @@ function CampaignList({ campaigns, onOpen, onNew, onDeleted }) {
           Every campaign keeps its full audience, suppressed recipients included. Nothing here is deleted
           once it has been built.
         </span>
-        <button className="btn" type="button" onClick={onNew}>New campaign</button>
+        {can('campaigns.send') && (
+          <button className="btn" type="button" onClick={onNew}>New campaign</button>
+        )}
       </div>
 
       {campaigns.length === 0 ? (
@@ -676,6 +680,7 @@ function CampaignList({ campaigns, onOpen, onNew, onDeleted }) {
  * one on request.
  */
 function CampaignDelete({ campaign, onDeleted }) {
+  const { can } = useCan();
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
@@ -690,6 +695,7 @@ function CampaignDelete({ campaign, onDeleted }) {
     onDeleted?.();
   }
 
+  if (!can('campaigns.send')) return null;
   if (err) return <span className="err inline">{err}</span>;
 
   if (!confirming) {

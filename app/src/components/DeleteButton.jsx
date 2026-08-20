@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { navigate } from '../router.js';
 import { trash, TRASHABLE } from '../lib/trash.js';
+import { useCan } from '../lib/capabilities.jsx';
 
 /**
  * The delete control on a detail page.
@@ -16,6 +17,13 @@ export default function DeleteButton({ table, id, name, onDeleted }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
   const meta = TRASHABLE[table];
+  const { can, ready } = useCan();
+
+  // The policy would refuse anyway; not rendering it means a VA never presses a
+  // button that appears to work and quietly changes nothing.
+  const allowed = table === 'prospect_lists' ? 'prospects.delete'
+    : table === 'broadcast_campaigns' ? 'campaigns.send'
+    : `${table}.delete`;
 
   async function go() {
     setBusy(true);
@@ -30,6 +38,8 @@ export default function DeleteButton({ table, id, name, onDeleted }) {
       setConfirming(false);
     }
   }
+
+  if (!ready || !can(allowed)) return null;
 
   if (!confirming) {
     return (

@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { trash, countLabel } from '../lib/trash.js';
+import { useCan } from '../lib/capabilities.jsx';
 
 /**
  * Bulk delete for deals, which is not quite the same gesture as bulk delete for
@@ -21,6 +22,7 @@ const TERMINAL = new Set(['closed', 'dead', 'seller_terminated', 'terminated_ins
 export default function DealsBulkBar({ deals, sel, onDone, onError }) {
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
+  const { can } = useCan();
 
   const live = useMemo(() => {
     const picked = new Set(sel.ids);
@@ -77,7 +79,9 @@ export default function DealsBulkBar({ deals, sel, onDone, onError }) {
               {live.value > 0 && ` · $${live.value.toLocaleString()} under contract`}
             </span>
           )}
-          <button className="btn ghost danger" onClick={() => setConfirming(true)}>Delete</button>
+          {can('deals.delete') && (
+            <button className="btn ghost danger" onClick={() => setConfirming(true)}>Delete</button>
+          )}
           <button className="btn ghost" onClick={sel.clear}>Clear</button>
         </>
       )}

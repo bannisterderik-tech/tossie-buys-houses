@@ -3,6 +3,7 @@ import { supabase } from '../supabase.js';
 import { navigate } from '../router.js';
 import useBulkSelect from '../lib/useBulkSelect.js';
 import BulkBar from '../components/BulkBar.jsx';
+import { useCan } from '../lib/capabilities.jsx';
 import { formatPhone, timeAgo, titleize } from '../lib/format.js';
 import './prospects.css';
 
@@ -449,6 +450,7 @@ export default function ProspectsPage() {
  * afterwards.
  */
 function ListBar({ lists, listId, onPick, onDeleted, onError }) {
+  const { can } = useCan();
   const [confirming, setConfirming] = useState(null);
   const [busy, setBusy] = useState(false);
 
@@ -510,7 +512,7 @@ function ListBar({ lists, listId, onPick, onDeleted, onError }) {
 
       {/* Deleting the *selected* list only. A delete control on every chip is a
           row of destructive buttons you brush past while picking a list. */}
-      {listId && target && (
+      {listId && target && can('prospects.delete') && (
         confirming === listId ? (
           <span className="confirmdelete" style={{ marginLeft: 8 }}>
             <span>

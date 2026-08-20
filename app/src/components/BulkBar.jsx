@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { trash, countLabel } from '../lib/trash.js';
+import { useCan } from '../lib/capabilities.jsx';
 
 /**
  * The "N selected — Delete" strip above a list.
@@ -11,8 +12,12 @@ import { trash, countLabel } from '../lib/trash.js';
 export default function BulkBar({ table, sel, onDone, onError, onText, textBlocked }) {
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
+  const { can } = useCan();
 
   if (sel.count === 0) return null;
+
+  const mayDelete = can(`${table}.delete`);
+  const mayText   = can('messages.send');
 
   async function go() {
     setBusy(true);
@@ -40,7 +45,7 @@ export default function BulkBar({ table, sel, onDone, onError, onText, textBlock
         </span>
       ) : (
         <>
-          {onText && (
+          {onText && mayText && (
             textBlocked
               // Disabled with the reason attached rather than hidden. A button
               // that vanishes at 251 rows reads as a bug; one that says why
@@ -48,7 +53,9 @@ export default function BulkBar({ table, sel, onDone, onError, onText, textBlock
               ? <span className="sub" title={textBlocked}>{textBlocked}</span>
               : <button className="btn" onClick={() => onText(sel.ids)}>Text selected</button>
           )}
-          <button className="btn ghost danger" onClick={() => setConfirming(true)}>Delete</button>
+          {mayDelete && (
+            <button className="btn ghost danger" onClick={() => setConfirming(true)}>Delete</button>
+          )}
           <button className="btn ghost" onClick={sel.clear}>Clear</button>
         </>
       )}
