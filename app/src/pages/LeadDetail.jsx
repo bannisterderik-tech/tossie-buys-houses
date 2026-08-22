@@ -63,7 +63,23 @@ const CONSENT_SOURCES = [
   'Replied to our text',
 ];
 
+/**
+ * The four things somebody does on a lead, in the order they do them.
+ *
+ * Not four groupings of data — four jobs. "Talk" is everything you need while
+ * the phone is ringing; "Property" is the house itself; "Offer" is the
+ * paperwork; "Record" is what has to be true and provable afterwards.
+ */
+const TABS = [
+  { key: 'talk', label: 'Talk' },
+  { key: 'property', label: 'Property' },
+  { key: 'offer', label: 'Offer' },
+  { key: 'record', label: 'Record' },
+];
+
 export default function LeadDetail({ id }) {
+  const [tab, setTab] = useState('talk');
+  const [assetCounts, setAssetCounts] = useState({ photos: 0, contracts: 0 });
   const [lead, setLead] = useState(null);
   const [activity, setActivity] = useState([]);
   const [notes, setNotes] = useState([]);
@@ -168,6 +184,26 @@ export default function LeadDetail({ id }) {
   }, [id]);
 
   useEffect(() => { setLoading(true); load(); loadComms(); }, [load, loadComms]);
+
+  /**
+   * Just the numbers for the tab badges. head:true asks PostgREST for the
+   * count and no rows, so this stays cheap on a lead carrying thirty photos —
+   * the gallery and the contract panel each load their own content when their
+   * tab is opened. Re-run on tab change so adding a photo updates the badge
+   * without a page reload.
+   */
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const [ph, ct] = await Promise.all([
+        supabase.from('property_photos').select('id', { count: 'exact', head: true }).eq('lead_id', id),
+        supabase.from('contracts').select('id', { count: 'exact', head: true }).eq('lead_id', id),
+      ]);
+      if (cancelled) return;
+      setAssetCounts({ photos: ph.count ?? 0, contracts: ct.count ?? 0 });
+    })();
+    return () => { cancelled = true; };
+  }, [id, tab]);
 
   /**
    * The seller's reply, on screen while the operator is looking at the lead.
@@ -325,6 +361,19 @@ export default function LeadDetail({ id }) {
         : `It is ${win.localTime} there. Texting is only permitted ${textOpensAt}am–9pm in the seller's own local time${win.guessed ? ', and their zone could not be resolved — so the tighter Eastern window applies' : ''}.`)
       : null;
 
+  /**
+   * What is behind each tab, so an empty one is visible without opening it.
+   * Photos and contracts load inside their own components, so those two are
+   * counted from the rows this page already has rather than lifted up — the
+   * badge is worth a stale beat, not a second query.
+   */
+  const counts = {
+    talk: messages.length + calls.length,
+    property: assetCounts.photos,
+    offer: assetCounts.contracts,
+    record: activity.length,
+  };
+
   return (
     <>
       <header>
@@ -346,37 +395,129 @@ export default function LeadDetail({ id }) {
         <DeleteButton table="leads" id={lead.id} name={lead.address || lead.name} onDeleted={() => navigate('/')} />
       </div>
 
-      <CallCard
-        leadId={id}
-        phone={phone}
-        dialable={dialable}
-        blocked={blocked}
-        win={win}
-        lead={lead}
-        onDone={load}
-      />
+      {/* ── the tab bar ───────────────────────────────────────────────────
+          Eleven cards in one column meant the compliance record and the
+          timeline sat four screens below the phone number, so nobody read
+          them and everybody scrolled past the offer to reach the notes.
 
-      <div className="comms">
-        {/* Keyed by lead, and this is the one place it is not a nicety. Going
-            from one seller to the next re-uses this component (App.jsx renders
-            LeadDetail without a key), so a half-typed message would follow the
-            operator into the next thread and Send would text a stranger — the
-            one mistake on this page no server-side rail can catch, because that
-            send is perfectly legitimate, just to the wrong person. */}
-        <MessageThread
-          key={id}
-          leadId={id}
-          to={phone}
-          messages={messages}
-          cannotSend={textBlocked}
-          sender={sender}
-          onSent={loadComms}
-        />
-        <CallHistory calls={calls} />
-      </div>
+          Grouped by what the operator is doing rather than by what the data
+          is, which is why Qualifying sits under Talk and not under Property:
+          those answers are filled in while somebody is on the phone, not
+          while they are looking at the house. Counts on the tab so the
+          absence of a photo or a contract is visible without opening it. */}
+      <nav className="leadtabs" role="tablist">
+        {TABS.map((t) => (
+          <button
+            key={t.key}
+            role="tab"
+            aria-selected={tab === t.key}
+            className={tab === t.key ? 'on' : undefined}
+            onClick={() => setTab(t.key)}
+          >
+            {t.label}
+            {counts[t.key] > 0 && <span className="tabcount">{counts[t.key]}</span>}
+          </button>
+        ))}
+      </nav>
 
-      <div className="detail">
-        <div>
+      {tab === 'talk' && (
+        <>
+          <CallCard
+            leadId={id}
+            phone={phone}
+            dialable={dialable}
+            blocked={blocked}
+            win={win}
+            lead={lead}
+            onDone={load}
+          />
+
+          <div className="comms">
+            {/* Keyed by lead, and this is the one place it is not a nicety. Going
+                from one seller to the next re-uses this component (App.jsx renders
+                LeadDetail without a key), so a half-typed message would follow the
+                operator into the next thread and Send would text a stranger — the
+                one mistake on this page no server-side rail can catch, because that
+                send is perfectly legitimate, just to the wrong person. */}
+            <MessageThread
+              key={id}
+              leadId={id}
+              to={phone}
+              messages={messages}
+              cannotSend={textBlocked}
+              sender={sender}
+              onSent={loadComms}
+            />
+            <CallHistory calls={calls} />
+          </div>
+
+          <div className="detail">
+            <div>
+          <div className="card">
+            <h2>Qualifying</h2>
+            <p className="cardnote">
+              The answers that decide whether this is a deal. Click any value to edit.
+            </p>
+            <div className="body">
+              <dl className="facts editable">
+                <InlineField label="Motivation" value={lead.motivation} onSave={(v) => patch({ motivation: v })} placeholder="why are they selling?" />
+                <InlineField label="Timeline"   value={lead.timeline}   onSave={(v) => patch({ timeline: v })} placeholder="how fast do they need out?" />
+                <InlineField label="Occupancy"  value={lead.occupancy}  onSave={(v) => patch({ occupancy: v })} options={OCCUPANCY} />
+                <InlineField label="Condition"  value={lead.condition_notes} onSave={(v) => patch({ condition_notes: v })} type="textarea" placeholder="roof, HVAC, foundation, what they volunteered" />
+                <InlineField label="Asking"     value={lead.asking_price}  onSave={patchNumber('asking_price')}  format={money} placeholder="what do they want?" />
+                <InlineField label="ARV est."   value={lead.arv_estimate}  onSave={patchNumber('arv_estimate')}  format={money} />
+                <InlineField label="Repairs est." value={lead.repair_estimate} onSave={patchNumber('repair_estimate')} format={money} />
+                <InlineField label="Mortgage"   value={lead.mortgage_balance} onSave={patchNumber('mortgage_balance')} format={money} />
+              </dl>
+
+              <div className="flags">
+                <Flag label="Already listed with an agent" on={lead.already_listed}
+                      onChange={(v) => patch({ already_listed: v })} />
+                <Flag label="Under contract with someone else" on={lead.under_contract_elsewhere}
+                      onChange={(v) => patch({ under_contract_elsewhere: v })} />
+                <Flag label="Liens or back taxes" on={lead.has_liens}
+                      onChange={(v) => patch({ has_liens: v })} />
+              </div>
+            </div>
+          </div>
+
+            </div>
+            <div>
+          <div className="card">
+            <h2>Notes</h2>
+            <div className="body">
+              <form onSubmit={addNote}>
+                <textarea
+                  className="note"
+                  placeholder="What did the seller say?"
+                  value={draft}
+                  onChange={(e) => setDraft(e.target.value)}
+                />
+                <div style={{ marginTop: 9 }}>
+                  <button className="btn" type="submit" disabled={!draft.trim()}>Add note</button>
+                </div>
+              </form>
+
+              {notes.length > 0 && (
+                <ul className="timeline" style={{ marginTop: 16 }}>
+                  {notes.map((n) => (
+                    <li key={n.id}>
+                      {n.body}
+                      <span className="when">{fullDate(n.created_at)}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+            </div>
+          </div>
+        </>
+      )}
+
+      {tab === 'property' && (
+        <div className="detail">
+          <div>
           {/* The property, above the seller, because it is what the page is
               titled with and what every number on the qualifying card is about.
 
@@ -412,15 +553,27 @@ export default function LeadDetail({ id }) {
           {/* Directly under the property, because that is what they are of.
               A lead's photos are the condition evidence an operator gathers
               before there is a contract, and they carry into the deal on their
-              own — see the trigger on deals, not any code here. */}
-          <PhotoGallery subject="lead" subjectId={id} teamId={lead.team_id} />
 
+          <PhotoGallery subject="lead" subjectId={id} teamId={lead.team_id} />
+          </div>
+        </div>
+      )}
+
+      {tab === 'offer' && (
+        <div className="detail">
+          <div>
           {/* Under the photos, above the seller: writing the offer is what
               happens after you have looked at the house, and the terms on it
               come from the qualifying card further down rather than from
               anything typed twice. */}
           <ContractPanel subject="lead" subjectId={id} teamId={lead.team_id} lead={lead} />
+          </div>
+        </div>
+      )}
 
+      {tab === 'record' && (
+        <div className="detail">
+          <div>
           <div className="card">
             <h2>Seller</h2>
             <div className="body">
@@ -433,64 +586,7 @@ export default function LeadDetail({ id }) {
             </div>
           </div>
 
-          <div className="card">
-            <h2>Qualifying</h2>
-            <p className="cardnote">
-              The answers that decide whether this is a deal. Click any value to edit.
-            </p>
-            <div className="body">
-              <dl className="facts editable">
-                <InlineField label="Motivation" value={lead.motivation} onSave={(v) => patch({ motivation: v })} placeholder="why are they selling?" />
-                <InlineField label="Timeline"   value={lead.timeline}   onSave={(v) => patch({ timeline: v })} placeholder="how fast do they need out?" />
-                <InlineField label="Occupancy"  value={lead.occupancy}  onSave={(v) => patch({ occupancy: v })} options={OCCUPANCY} />
-                <InlineField label="Condition"  value={lead.condition_notes} onSave={(v) => patch({ condition_notes: v })} type="textarea" placeholder="roof, HVAC, foundation, what they volunteered" />
-                <InlineField label="Asking"     value={lead.asking_price}  onSave={patchNumber('asking_price')}  format={money} placeholder="what do they want?" />
-                <InlineField label="ARV est."   value={lead.arv_estimate}  onSave={patchNumber('arv_estimate')}  format={money} />
-                <InlineField label="Repairs est." value={lead.repair_estimate} onSave={patchNumber('repair_estimate')} format={money} />
-                <InlineField label="Mortgage"   value={lead.mortgage_balance} onSave={patchNumber('mortgage_balance')} format={money} />
-              </dl>
 
-              <div className="flags">
-                <Flag label="Already listed with an agent" on={lead.already_listed}
-                      onChange={(v) => patch({ already_listed: v })} />
-                <Flag label="Under contract with someone else" on={lead.under_contract_elsewhere}
-                      onChange={(v) => patch({ under_contract_elsewhere: v })} />
-                <Flag label="Liens or back taxes" on={lead.has_liens}
-                      onChange={(v) => patch({ has_liens: v })} />
-              </div>
-            </div>
-          </div>
-
-          <div className="card">
-            <h2>Notes</h2>
-            <div className="body">
-              <form onSubmit={addNote}>
-                <textarea
-                  className="note"
-                  placeholder="What did the seller say?"
-                  value={draft}
-                  onChange={(e) => setDraft(e.target.value)}
-                />
-                <div style={{ marginTop: 9 }}>
-                  <button className="btn" type="submit" disabled={!draft.trim()}>Add note</button>
-                </div>
-              </form>
-
-              {notes.length > 0 && (
-                <ul className="timeline" style={{ marginTop: 16 }}>
-                  {notes.map((n) => (
-                    <li key={n.id}>
-                      {n.body}
-                      <span className="when">{fullDate(n.created_at)}</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          </div>
-        </div>
-
-        <div>
           <div className="card">
             <h2>Compliance</h2>
             <div className="body">
@@ -559,6 +655,8 @@ export default function LeadDetail({ id }) {
             </div>
           </div>
 
+          </div>
+          <div>
           <div className="card">
             <h2>Capture</h2>
             <div className="body">
@@ -569,6 +667,7 @@ export default function LeadDetail({ id }) {
               </dl>
             </div>
           </div>
+
 
           <div className="card">
             <h2>Timeline</h2>
@@ -587,8 +686,10 @@ export default function LeadDetail({ id }) {
               )}
             </div>
           </div>
+          </div>
         </div>
-      </div>
+      )}
+
     </>
   );
 }
@@ -939,6 +1040,63 @@ function Message({ m }) {
 
 /* ── what happened on the phone ──────────────────────────────────────────── */
 
+/**
+ * A recording, fetched rather than linked.
+ *
+ * The obvious version of this was `<audio src={c.recording_url} />` and it
+ * could never have worked: recording_url points at api.twilio.com, which
+ * answers 401 without HTTP Basic auth on the account credentials — checked
+ * against the live API, not assumed. A media element cannot be told to send an
+ * Authorization header, so there is no arrangement of props that fixes it.
+ *
+ * The call-recording function holds the Twilio credentials, checks the call
+ * belongs to the caller's team through call_log's own RLS, and streams the
+ * audio back. That arrives here as a blob, and an object URL off the blob is
+ * something <audio> can play.
+ *
+ * Loaded on click rather than on render. A lead with a dozen calls would
+ * otherwise pull a dozen recordings nobody asked to hear, and each one is a
+ * paid Twilio media request.
+ */
+function Recording({ callId }) {
+  const [src, setSrc] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+
+  // Object URLs hold the blob in memory until they are revoked, and this
+  // component unmounts every time the operator moves to the next lead.
+  useEffect(() => () => { if (src) URL.revokeObjectURL(src); }, [src]);
+
+  async function play() {
+    setBusy(true);
+    setErr(null);
+    const { data, error } = await supabase.functions.invoke('call-recording', {
+      body: { call_id: callId },
+    });
+    setBusy(false);
+    if (error) {
+      // The function answers with JSON on every refusal, and that sentence is
+      // more use than "FunctionsHttpError".
+      let msg = error.message;
+      try {
+        const body = await error.context?.json?.();
+        if (body?.error) msg = body.error;
+      } catch { /* keep the generic one */ }
+      setErr(msg);
+      return;
+    }
+    setSrc(URL.createObjectURL(data));
+  }
+
+  if (err) return <span className="fine" style={{ color: '#a11b0f' }}>{err}</span>;
+  if (src) return <audio controls autoPlay src={src} />;
+  return (
+    <button className="linkbtn" disabled={busy} onClick={play}>
+      {busy ? 'Loading recording…' : '▸ Play recording'}
+    </button>
+  );
+}
+
 /** '95' -> '1m 35s'. Null durations are a call that never connected. */
 function duration(secs) {
   if (secs === null || secs === undefined) return null;
@@ -984,9 +1142,7 @@ function CallHistory({ calls }) {
                 c.disposition ? titleize(c.disposition) : null,
               ].filter(Boolean).join(' · ')}
             </span>
-            {/* preload="none" so opening a lead with a dozen calls on it does not
-                fetch a dozen recordings nobody asked to hear. */}
-            {c.recording_url && <audio controls preload="none" src={c.recording_url} />}
+            {c.recording_url && <Recording callId={c.id} />}
           </div>
         ))
       )}

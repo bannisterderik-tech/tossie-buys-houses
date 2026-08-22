@@ -1228,3 +1228,30 @@ table.leads tr.picked { background: #eef3fb; }
   padding: 6px 9px; border: 1.5px solid var(--line); border-radius: 7px;
   background: #fff; font-size: 0.86rem;
 }
+
+/* ── lead detail tabs ─────────────────────────────────────────────────────
+   Eleven stacked cards put the compliance record four screens below the phone
+   number. Grouped by the job rather than by the data — Qualifying sits with
+   the phone because those answers get typed while somebody is talking. */
+.leadtabs {
+  display: flex; gap: 3px; flex-wrap: wrap;
+  border-bottom: 1.5px solid var(--line);
+  margin: 0 0 16px;
+}
+.leadtabs button {
+  display: inline-flex; align-items: center; gap: 7px;
+  background: none; border: 0; cursor: pointer;
+  padding: 10px 15px;
+  font-size: 0.93rem; font-weight: 700; color: var(--muted);
+  border-bottom: 2.5px solid transparent;
+  margin-bottom: -1.5px;
+  border-radius: 7px 7px 0 0;
+}
+.leadtabs button:hover { color: var(--ink); background: var(--wash); }
+.leadtabs button.on { color: var(--navy); border-bottom-color: var(--navy); }
+.leadtabs .tabcount {
+  display: inline-block; min-width: 19px; padding: 1px 6px;
+  border-radius: 100px; background: var(--wash); border: 1px solid var(--line);
+  font-size: 0.72rem; font-weight: 700; color: var(--body); text-align: center;
+}
+.leadtabs button.on .tabcount { background: #eef3fb; border-color: #c9d8ee; color: var(--navy); }
