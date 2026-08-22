@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { supabase } from '../supabase.js';
 import { useRoute } from '../router.js';
 import { useCan } from '../lib/capabilities.jsx';
@@ -36,10 +37,53 @@ const SOON = [];
 export default function Layout({ session, children }) {
   const path = useRoute();
   const { can, ready } = useCan();
+  const [menu, setMenu] = useState(false);
+
+  /**
+   * The sheet closes when you arrive somewhere.
+   *
+   * Without this it stays open over the page it just navigated to, because
+   * the router swaps the view without unmounting the shell — so the operator
+   * taps "Leads", the leads page renders underneath, and the screen still
+   * shows the menu. Keyed on the path rather than on the click so it also
+   * covers the back button and any link inside the sheet that is added later.
+   */
+  useEffect(() => { setMenu(false); }, [path]);
+
+  /**
+   * Escape closes it too. The sheet covers the whole screen below the bar, so
+   * on a tablet with a keyboard there is otherwise no way out but the button
+   * that opened it.
+   */
+  useEffect(() => {
+    if (!menu) return;
+    const onKey = (e) => { if (e.key === 'Escape') setMenu(false); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [menu]);
 
   return (
     <div className="shell">
-      <aside className="sidebar">
+      {/* Phone only — display:none above the breakpoint. The desktop sidebar
+          keeps its own brand and its own New lead button, so nothing here is
+          a second copy of anything visible at the same time. */}
+      <div className="navbar">
+        <span className="brand">
+          <img src={__BIZ__.logo} alt="" />
+          <span>Tossie</span>
+        </span>
+        <a href="/app/leads/new" className="btn">+ Lead</a>
+        <button
+          className="menubtn"
+          aria-expanded={menu}
+          aria-controls="mainnav"
+          onClick={() => setMenu((v) => !v)}
+        >
+          {menu ? 'Close' : 'Menu'}
+        </button>
+      </div>
+
+      <aside id="mainnav" className={`sidebar${menu ? ' open' : ''}`}>
         <div className="brand">
           <img src={__BIZ__.logo} alt="" />
           <span>Tossie</span>

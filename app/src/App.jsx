@@ -22,6 +22,9 @@ import ProspectDetail from './pages/ProspectDetail.jsx';
 import TrashPage from './pages/TrashPage.jsx';
 import TeamPage from './pages/TeamPage.jsx';
 import { CapabilitiesProvider } from './lib/capabilities.jsx';
+// Imported last on purpose: CSS is emitted in module order, so the mobile
+// pass has to come after every page's own stylesheet to win a tie.
+import './mobile.css';
 
 export default function App() {
   const [session, setSession] = useState(null);
