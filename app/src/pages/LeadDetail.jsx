@@ -6,6 +6,7 @@ import FollowUpField from '../components/FollowUpField.jsx';
 import InlineField from '../components/InlineField.jsx';
 import PropertyLinks from '../components/PropertyLinks.jsx';
 import PhotoGallery from '../components/PhotoGallery.jsx';
+import ContractPanel from '../components/ContractPanel.jsx';
 import DispositionBar from '../components/DispositionBar.jsx';
 import { DeliveryChip, DeliveryFailure } from '../components/DeliveryState.jsx';
 import { SoftphoneControl, SoftphoneNotice, useSoftphone } from '../components/Softphone.jsx';
@@ -413,6 +414,12 @@ export default function LeadDetail({ id }) {
               before there is a contract, and they carry into the deal on their
               own — see the trigger on deals, not any code here. */}
           <PhotoGallery subject="lead" subjectId={id} teamId={lead.team_id} />
+
+          {/* Under the photos, above the seller: writing the offer is what
+              happens after you have looked at the house, and the terms on it
+              come from the qualifying card further down rather than from
+              anything typed twice. */}
+          <ContractPanel subject="lead" subjectId={id} teamId={lead.team_id} lead={lead} />
 
           <div className="card">
             <h2>Seller</h2>

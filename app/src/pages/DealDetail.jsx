@@ -3,6 +3,7 @@ import { supabase } from '../supabase.js';
 import InlineField from '../components/InlineField.jsx';
 import DeleteButton from '../components/DeleteButton.jsx';
 import PhotoGallery from '../components/PhotoGallery.jsx';
+import ContractPanel from '../components/ContractPanel.jsx';
 import { navigate } from '../router.js';
 import {
   DEAL_STATUSES, OCCUPANCY, dealStatusLabel,
@@ -205,6 +206,7 @@ export default function DealDetail({ id }) {
               photos gathered while this was a lead are already in here — the
               trigger on deals stamped them when this record was created. */}
           <PhotoGallery subject="deal" subjectId={deal.id} teamId={deal.team_id} />
+          <ContractPanel subject="deal" subjectId={deal.id} teamId={deal.team_id} lead={deal.lead} />
           <Documents deal={deal} docs={docs} onDone={load} onErr={setErr} />
           <Events events={events} />
         </div>
