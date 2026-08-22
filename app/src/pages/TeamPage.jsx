@@ -1,7 +1,29 @@
-import { useCallback, useEffect, useState } from 'react';
+import { Fragment, useCallback, useEffect, useState } from 'react';
 import { supabase } from '../supabase.js';
 import { ROLES, ROLE_LABEL, useCan } from '../lib/capabilities.jsx';
-import { timeAgo } from '../lib/format.js';
+import { timeAgo, titleize } from '../lib/format.js';
+
+/**
+ * Capabilities, grouped the way somebody thinks about them rather than the way
+ * they sort alphabetically. The list itself comes from the database — this only
+ * decides the order and the heading a capability appears under, so a capability
+ * added later still shows up, just at the bottom under its own prefix.
+ */
+const CAP_GROUPS = [
+  { key: 'leads', label: 'Leads' },
+  { key: 'prospects', label: 'Prospects' },
+  { key: 'buyers', label: 'Buyers' },
+  { key: 'deals', label: 'Deals' },
+  { key: 'campaigns', label: 'Campaigns' },
+  { key: 'messages', label: 'Messages' },
+  { key: 'dialer', label: 'Dialer' },
+  { key: 'sdr', label: 'AI SDR' },
+  { key: 'import', label: 'Import' },
+  { key: 'settings', label: 'Settings' },
+];
+
+/** 'leads.delete' -> 'Delete'. The group heading already says which noun. */
+const capVerb = (cap) => titleize(cap.split('.')[1] ?? cap);
 
 /**
  * Who is on the team and what they can do.
@@ -25,6 +47,9 @@ export default function TeamPage() {
   const { role: myRole, can } = useCan();
   const [members, setMembers] = useState([]);
   const [invites, setInvites] = useState([]);
+  const [roleCaps, setRoleCaps] = useState([]);
+  const [overrides, setOverrides] = useState([]);
+  const [openMember, setOpenMember] = useState(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState(null);
   const [busy, setBusy] = useState(null);
@@ -34,15 +59,21 @@ export default function TeamPage() {
   const manage = can('team.manage');
 
   const load = useCallback(async () => {
-    const [m, a] = await Promise.all([
+    const [m, a, rc, uc] = await Promise.all([
       supabase.from('team_members').select('*, profiles(id, email, full_name)').order('created_at'),
       supabase.from('allowed_signups').select('*').order('created_at'),
+      // The same two tables has_capability() consults, so what this screen
+      // shows and what the database enforces cannot disagree.
+      supabase.from('role_capabilities').select('role, capability'),
+      supabase.from('user_capabilities').select('*'),
     ]);
     if (m.error) setErr(m.error.message);
     setMembers(m.data ?? []);
     // A silent failure here is fine and expected for non-owners: the allowlist
     // is owner-only, and the section is not rendered for them anyway.
     setInvites(a.data ?? []);
+    setRoleCaps(rc.data ?? []);
+    setOverrides(uc.data ?? []);
     setLoading(false);
   }, []);
 
@@ -66,6 +97,44 @@ export default function TeamPage() {
       .insert({ email: addr, note: note.trim() || null });
     if (error) setErr(error.message);
     else { setEmail(''); setNote(''); }
+    await load();
+    setBusy(null);
+  }
+
+  /**
+   * Hand the account over.
+   *
+   * Confirmed in the browser as well as guarded in the database, because this
+   * is the one action on the page that takes something away from the person
+   * doing it — and the RPC cannot ask "are you sure", it can only refuse or
+   * comply. Ownership moves in two places (team_members.role and
+   * teams.created_by) and the outgoing owner lands on admin, so the wording
+   * says exactly that rather than "you will lose access", which is not true.
+   */
+  async function makeOwner(m) {
+    const who = m.profiles?.email || 'this person';
+    if (!window.confirm(
+      `Make ${who} the owner of this team?\n\n`
+      + `They get everything, including who is on the team and what each person may do.\n`
+      + `You become an Admin — you keep every day-to-day permission, but you will not be `
+      + `able to change roles, invite people, or take ownership back yourself. `
+      + `Only ${who} can hand it back.`
+    )) return;
+
+    setBusy(m.user_id);
+    const { error } = await supabase.rpc('transfer_team_ownership', { p_new_owner_id: m.user_id });
+    if (error) setErr(error.message);
+    await load();
+    setBusy(null);
+  }
+
+  /** null clears the override and hands the decision back to the role. */
+  async function setCap(userId, capability, granted) {
+    setBusy(`${userId}:${capability}`);
+    const { error } = await supabase.rpc('set_user_capability', {
+      p_user_id: userId, p_capability: capability, p_granted: granted, p_note: null,
+    });
+    if (error) setErr(error.message);
     await load();
     setBusy(null);
   }
@@ -108,30 +177,76 @@ export default function TeamPage() {
             <tbody>
               {members.map((m) => {
                 const isOwner = m.role === 'owner';
+                const mine = overrides.filter((o) => o.user_id === m.user_id);
+                const open = openMember === m.user_id;
                 return (
-                  <tr key={m.user_id}>
-                    <td>
-                      <span className="addr">{m.profiles?.full_name || m.profiles?.email || 'Unknown'}</span>
-                      <span className="sub">
-                        {[m.profiles?.email, `joined ${timeAgo(m.created_at)}`].filter(Boolean).join(' · ')}
-                      </span>
-                    </td>
-                    <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
-                      {manage && !isOwner ? (
-                        <select
-                          value={m.role}
-                          disabled={busy === m.user_id}
-                          onChange={(e) => setRole(m.user_id, e.target.value)}
-                        >
-                          {ROLES.filter((r) => r.key !== 'owner').map((r) => (
-                            <option key={r.key} value={r.key}>{r.label}</option>
-                          ))}
-                        </select>
-                      ) : (
-                        <span className="badge">{ROLE_LABEL[m.role] ?? m.role}</span>
-                      )}
-                    </td>
-                  </tr>
+                  <Fragment key={m.user_id}>
+                    <tr>
+                      <td>
+                        <span className="addr">{m.profiles?.full_name || m.profiles?.email || 'Unknown'}</span>
+                        <span className="sub">
+                          {[m.profiles?.email, `joined ${timeAgo(m.created_at)}`].filter(Boolean).join(' · ')}
+                        </span>
+                        {mine.length > 0 && (
+                          <span className="sub">
+                            <span className="badge warm">
+                              {mine.filter((o) => o.granted).length} added
+                              {' · '}
+                              {mine.filter((o) => !o.granted).length} blocked
+                            </span>
+                            {' '}beyond the role
+                          </span>
+                        )}
+                      </td>
+                      <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                        {manage && !isOwner ? (
+                          <select
+                            value={m.role}
+                            disabled={busy === m.user_id}
+                            onChange={(e) => setRole(m.user_id, e.target.value)}
+                          >
+                            {ROLES.filter((r) => r.key !== 'owner').map((r) => (
+                              <option key={r.key} value={r.key}>{r.label}</option>
+                            ))}
+                          </select>
+                        ) : (
+                          <span className="badge">{ROLE_LABEL[m.role] ?? m.role}</span>
+                        )}
+                        {manage && !isOwner && (
+                          <>
+                            {' '}
+                            <button
+                              className="linkbtn"
+                              onClick={() => setOpenMember(open ? null : m.user_id)}
+                            >
+                              {open ? 'done' : 'permissions'}
+                            </button>
+                            {' '}
+                            <button
+                              className="linkbtn"
+                              disabled={busy === m.user_id}
+                              onClick={() => makeOwner(m)}
+                            >
+                              make owner
+                            </button>
+                          </>
+                        )}
+                      </td>
+                    </tr>
+                    {open && (
+                      <tr>
+                        <td colSpan={2}>
+                          <MemberPermissions
+                            member={m}
+                            roleCaps={roleCaps}
+                            overrides={mine}
+                            busy={busy}
+                            onSet={setCap}
+                          />
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
                 );
               })}
             </tbody>
@@ -225,5 +340,90 @@ export default function TeamPage() {
         </div>
       </div>
     </>
+  );
+}
+
+/**
+ * One person's exceptions, capability by capability.
+ *
+ * Three states per row and not a checkbox, because "the role decides" is a
+ * genuinely different answer from "no" and collapsing them loses the thing
+ * that makes this safe to use. A checkbox left unticked would silently pin a
+ * permission to off — so promoting that person to Admin later would not give
+ * them the Admin permissions, and nothing on screen would say why.
+ *
+ *   Role default  no row. Change the role and this follows.
+ *   Allowed       granted, whatever the role says.
+ *   Blocked       refused, whatever the role says.
+ *
+ * The role's own answer is printed next to each control so an override is a
+ * visible departure from something rather than a setting in a vacuum.
+ */
+function MemberPermissions({ member, roleCaps, overrides, busy, onSet }) {
+  const all = [...new Set(roleCaps.map((r) => r.capability))];
+  const roleHas = new Set(
+    roleCaps.filter((r) => r.role === member.role).map((r) => r.capability),
+  );
+  const byCap = new Map(overrides.map((o) => [o.capability, o.granted]));
+
+  // Grouped by the prefix, in CAP_GROUPS order, with anything unrecognised
+  // falling in at the end under its own name rather than vanishing.
+  const groups = [];
+  const seen = new Set();
+  for (const g of CAP_GROUPS) {
+    const caps = all.filter((c) => c.split('.')[0] === g.key).sort();
+    caps.forEach((c) => seen.add(c));
+    if (caps.length) groups.push({ label: g.label, caps });
+  }
+  const rest = all.filter((c) => !seen.has(c)).sort();
+  if (rest.length) groups.push({ label: 'Other', caps: rest });
+
+  return (
+    <div className="permpanel">
+      <p className="fine">
+        Exceptions for <strong>{member.profiles?.email || 'this person'}</strong>, on top of
+        what <strong>{ROLE_LABEL[member.role] ?? member.role}</strong> already allows. These are
+        enforced by the database — has_capability() reads this table before it reads the role,
+        so a block here holds even against a request that never touches this screen.
+      </p>
+
+      {groups.map((g) => (
+        <div key={g.label} className="permgroup">
+          <h3>{g.label}</h3>
+          {g.caps.map((cap) => {
+            const fromRole = roleHas.has(cap);
+            const override = byCap.has(cap) ? byCap.get(cap) : null;
+            const effective = override === null ? fromRole : override;
+            const key = `${member.user_id}:${cap}`;
+            return (
+              <div className="permrow" key={cap}>
+                <span className="permname">
+                  {capVerb(cap)}
+                  <span className="fine">
+                    {fromRole ? 'the role allows this' : 'the role does not allow this'}
+                  </span>
+                </span>
+                <span className={`badge ${effective ? 'ok' : 'stop'}`}>
+                  {effective ? 'Can' : 'Cannot'}
+                </span>
+                <select
+                  value={override === null ? '' : override ? 'yes' : 'no'}
+                  disabled={busy === key}
+                  onChange={(e) => onSet(
+                    member.user_id,
+                    cap,
+                    e.target.value === '' ? null : e.target.value === 'yes',
+                  )}
+                >
+                  <option value="">Role default</option>
+                  <option value="yes">Allowed</option>
+                  <option value="no">Blocked</option>
+                </select>
+              </div>
+            );
+          })}
+        </div>
+      ))}
+    </div>
   );
 }

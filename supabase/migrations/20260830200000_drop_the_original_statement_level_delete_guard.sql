@@ -1,0 +1,11 @@
+-- The previous migration created the row-level DELETE guard but left the
+-- original statement-level one in place, because it guessed at the trigger
+-- name and guessed wrong: it is `deal_events_append_only`, not any of the
+-- trg_* names that were dropped. Both fired, the statement-level one first, and
+-- the cascade was refused exactly as before.
+--
+-- Dropped now that named replacements exist for all three events:
+--   trg_deal_events_no_update    STATEMENT, UPDATE
+--   trg_deal_events_no_truncate  STATEMENT, TRUNCATE
+--   trg_deal_events_no_delete    ROW,       DELETE
+drop trigger if exists deal_events_append_only on public.deal_events;

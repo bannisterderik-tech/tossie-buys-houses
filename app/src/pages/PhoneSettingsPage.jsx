@@ -139,9 +139,10 @@ export default function PhoneSettingsPage() {
   // somebody clicking again wondering whether it worked.
   const [syncResult, setSyncResult] = useState(null);
   const [syncErr, setSyncErr] = useState(null);
+  const [roster, setRoster] = useState([]);
 
   const load = useCallback(async () => {
-    const [n, s, t] = await Promise.all([
+    const [n, s, mem, t] = await Promise.all([
       // Released numbers are read too, not filtered out. They are shown in
       // their own quiet section further down: a number that disappeared with no
       // trace is how somebody concludes the app lost their data, and the
@@ -149,6 +150,10 @@ export default function PhoneSettingsPage() {
       supabase.from('phone_numbers').select('*')
         .order('is_primary', { ascending: false }).order('created_at'),
       supabase.from('telephony_settings').select('*').eq('team_id', TEAM_ID).maybeSingle(),
+      // Who a number can be assigned to. team_members only holds people who
+      // have actually signed in, which is the right list: assigning a number to
+      // an invited address nobody has used would route calls to nobody.
+      supabase.from('team_members').select('user_id, role, profiles(id, email, full_name)').order('created_at'),
       // Read-only here. teams.sms_send_disabled is the owner-only hard kill —
       // RLS restricts UPDATE to the owner — so this page reports it and does
       // not offer to flip it. A checkbox that silently fails is worse than none.
@@ -168,6 +173,9 @@ export default function PhoneSettingsPage() {
     if (!n.error) setNumbers(n.data ?? []);
     if (!s.error) setSettings(s.data ?? null);
     if (!t.error) setHardKill(Boolean(t.data?.sms_send_disabled));
+    // Not folded into `failed`: a VA can read numbers but not the roster,
+    // and an empty assignee list is a missing dropdown, not a broken page.
+    if (!mem.error) setRoster(mem.data ?? []);
     setLoading(false);
   }, []);
 
@@ -333,6 +341,7 @@ export default function PhoneSettingsPage() {
                 key={n.id}
                 number={n}
                 liveCount={live.length}
+                roster={roster}
                 onPatch={(fields) => patchNumber(n.id, fields)}
                 onMakePrimary={() => makePrimary(n.id)}
                 onReleased={load}
@@ -555,7 +564,7 @@ export default function PhoneSettingsPage() {
 
 /* ── one number ─────────────────────────────────────────────────────────── */
 
-function PhoneRow({ number: n, liveCount, onPatch, onMakePrimary, onReleased }) {
+function PhoneRow({ number: n, liveCount, roster, onPatch, onMakePrimary, onReleased }) {
   const a2p = A2P[n.a2p_status] ?? A2P.not_started;
   // The database does not stop sms_enabled going true on an unregistered
   // number, and neither does this checkbox once A2P says approved — it only
@@ -633,6 +642,28 @@ function PhoneRow({ number: n, liveCount, onPatch, onMakePrimary, onReleased }) 
           }}
           options={A2P_STATUSES}
         />
+        {/* Assignment sits directly above forwarding because the two are one
+            decision in practice: whose number this is, and therefore whose
+            phone should ring when nobody picks it up in the app. */}
+        <dt>Worked by</dt>
+        <dd>
+          <select
+            value={n.user_id ?? ''}
+            onChange={(e) => onPatch({ user_id: e.target.value || null })}
+          >
+            <option value="">Shared — anyone can send from it</option>
+            {(roster ?? []).map((m) => (
+              <option key={m.user_id} value={m.user_id}>
+                {m.profiles?.full_name || m.profiles?.email || m.user_id}
+              </option>
+            ))}
+          </select>
+          <span className="fine" style={{ display: 'block', marginTop: 4 }}>
+            {n.user_id
+              ? 'Their outbound calls and texts go out from this number by default. Everyone else keeps using the shared one.'
+              : 'No default owner. Anyone sends from this if they have no number of their own.'}
+          </span>
+        </dd>
         <InlineField
           label="Forward calls to"
           value={n.forward_to_e164}

@@ -1203,3 +1203,28 @@ table.leads tr.picked { background: #eef3fb; }
 .rolecard { border: 1px solid var(--line); border-radius: 9px; padding: 11px 13px; background: #fff; }
 .rolecard strong { display: block; font-size: 0.92rem; margin-bottom: 3px; }
 .rolecard p { margin: 0; font-size: 0.85rem; color: var(--muted); line-height: 1.45; }
+
+/* ── per-person permissions ───────────────────────────────────────────────
+   Sits inside a table row on the Team page, so it gets its own surface to
+   separate one person's exceptions from the roster around it. */
+.permpanel {
+  background: var(--wash); border: 1px solid var(--line);
+  border-radius: 9px; padding: 13px 15px; margin: 4px 0 8px;
+}
+.permpanel > p.fine { margin: 0 0 12px; max-width: 74ch; }
+.permgroup + .permgroup { margin-top: 14px; }
+.permgroup h3 {
+  font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.07em;
+  color: var(--muted); margin: 0 0 6px;
+}
+.permrow {
+  display: flex; align-items: center; gap: 10px;
+  padding: 7px 0; border-bottom: 1px solid var(--line);
+}
+.permrow:last-child { border-bottom: 0; }
+.permname { flex: 1; min-width: 0; font-size: 0.9rem; font-weight: 600; }
+.permname .fine { display: block; font-weight: 400; }
+.permrow select {
+  padding: 6px 9px; border: 1.5px solid var(--line); border-radius: 7px;
+  background: #fff; font-size: 0.86rem;
+}
