@@ -44,15 +44,34 @@
    Sits inside the bubble, under the text, so it cannot be mistaken for a note
    about a different message. Weight and colour are the error palette's, because
    the one thing this must never read as is metadata. */
+/* Self-contained, because it cannot rely on the bubble underneath it.
+   An outbound bubble is navy with white text, and #a11b0f on navy is the
+   contrast this block was rendering at — dark red on dark blue, effectively
+   unreadable, which is exactly the failure it exists to announce. It now
+   carries its own light ground and border, so it reads the same whether the
+   bubble around it went pink, stayed navy, or changes again later. */
 .delivwhy {
-  display: block; margin-top: 5px; font-size: 0.79rem; font-weight: 700; color: #a11b0f;
+  display: block;
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #fdecea;
+  border: 1px solid #f0b3aa;
+  border-left: 3px solid #a11b0f;
+  color: #8c1a10;
+  font-size: 0.79rem;
+  font-weight: 700;
+  line-height: 1.45;
+  /* A Twilio code or a long carrier string must wrap rather than run past the
+     bubble's edge — the right-hand half of the sentence was being clipped. */
+  overflow-wrap: anywhere;
 }
 .delivwhy .code {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 700;
 }
 /* The translated Twilio code, in normal weight under the headline: the headline
    says the seller did not get it, this says what to do about it. */
-.delivwhy .what { display: block; margin-top: 3px; font-weight: 400; }
+.delivwhy .what { display: block; margin-top: 3px; font-weight: 400; color: #7a2018; }
 
 /* 30007 and 30034 are not facts about this seller — they are facts about our
    messaging registration, and they are hitting every text on the number. An
@@ -70,7 +89,16 @@
    here so the inbox gets the same treatment the lead panel's .msg.dead already
    had. A failed text that still renders navy-on-the-right is a text the
    operator believes the seller has. */
-.bubble.dead .text {
-  background: #fdecea; color: #8c1a10; border: 1.5px solid #a11b0f;
+/* Both bubble vocabularies, restated at a specificity the .out rules in
+   styles.css and lead-comms.css cannot tie. Those are `.bubble.out .text` and
+   `.msg.out .text` — identical weight to a `.dead` selector, so which one wins
+   depends on stylesheet order, and stylesheet order here depends on which page
+   imported what first. That is not a thing to leave to chance when the losing
+   outcome is a failed message that still looks delivered. */
+.bubble.dead.dead .text,
+.msg.dead.dead .text {
+  background: #fdecea;
+  color: #8c1a10;
+  border: 1.5px solid #a11b0f;
   border-bottom-right-radius: 4px;
 }

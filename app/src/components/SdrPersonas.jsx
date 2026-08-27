@@ -112,7 +112,7 @@ export default function SdrPersonas() {
           {err && <div className="err">{err}</div>}
           <p className="cardnote">
             One script per kind of lead. Everything here is added <strong>after</strong> the
-            hard rules — never naming a price, always disclosing it is automated, never giving
+            hard rules — never naming a price, never claiming to be a human being, never giving
             legal advice — so a script cannot loosen them. It can only change the voice, add
             rules of its own, and say how to open.
           </p>
