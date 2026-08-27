@@ -118,6 +118,44 @@ function lastSellerMessage(conv) {
   return null;
 }
 
+/**
+ * Whether the clock is running.
+ *
+ * Reads sdr_scheduler_status(), which reports the SHAPE of the stored
+ * credential and never the credential itself — its length and whether it
+ * parses as a JWT. That is enough to tell "nothing stored" from "somebody
+ * pasted the placeholder" from "armed", and none of it is a secret.
+ */
+function SchedulerBanner() {
+  const [s, setS] = useState(null);
+
+  useEffect(() => {
+    supabase.rpc('sdr_scheduler_status').then(({ data }) => {
+      setS(Array.isArray(data) ? data[0] : data);
+    });
+  }, []);
+
+  if (!s) return null;
+  if (s.armed) {
+    return (
+      <div className="banner ok">
+        <strong>The SDR clock is running</strong>
+        {s.reason}
+      </div>
+    );
+  }
+  return (
+    <div className="banner stop">
+      <strong>Enrolling leads will not send anything yet</strong>
+      {s.reason}
+      {' '}The schedule itself is fine — {s.jobs} of 2 jobs active
+      {s.last_status ? `, last call returned ${s.last_status}` : ''}. Store the project's
+      service role key in Vault under the name <code>sdr_cron_service_key</code> and the
+      next tick picks it up; nothing needs redeploying.
+    </div>
+  );
+}
+
 export default function SdrPage() {
   const [settings, setSettings] = useState(null);
   const [team, setTeam] = useState(null);
@@ -228,6 +266,16 @@ export default function SdrPage() {
           Re-running <code>20260818130000_sdr.sql</code> seeds it back, disabled and in draft mode.
         </div>
       )}
+
+      {/* Armed or not, stated before anything else on the page.
+
+          The SDR can be switched on, have leads enrolled, have a persona, and
+          still never say a word — because the thing that actually sends the
+          first message is a scheduled sweep, and that sweep needs a credential
+          nobody can see from in here. When it is missing or wrong the only
+          symptom is silence, which is indistinguishable from "no leads are
+          due". This says which. */}
+      <SchedulerBanner />
 
       <ModeCard
         settings={settings}
