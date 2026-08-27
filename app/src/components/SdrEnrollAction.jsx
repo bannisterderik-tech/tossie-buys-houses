@@ -42,21 +42,62 @@ export default function SdrEnrollAction({ sel, onDone, onError }) {
   async function run(enabled) {
     setBusy(true);
     setResult(null);
+    const ids = sel.ids;
     const { data, error } = await supabase.rpc('set_sdr_enrollment', {
-      p_lead_ids: sel.ids,
+      p_lead_ids: ids,
       p_enabled: enabled,
       p_persona_id: enabled && personaId ? personaId : null,
     });
-    setBusy(false);
-    if (error) { onError?.(error.message); return; }
+    if (error) { setBusy(false); onError?.(error.message); return; }
     const row = Array.isArray(data) ? data[0] : data;
-    setResult(row ?? null);
-    if (!enabled || !row?.skipped) {
+
+    /**
+     * Setting the flag is not the same as starting the conversation.
+     *
+     * This was the whole reason enrolling appeared to do nothing.
+     * set_sdr_enrollment writes sdr_enabled and stops; the thing that gives the
+     * SDR something to work is an sdr_conversations row, and only
+     * initial_outreach creates one. Without this call a lead sat enrolled
+     * forever with no conversation, so the grace sweep had nothing to find and
+     * no first message was ever sent.
+     *
+     * It starts the grace clock rather than sending. The send happens when the
+     * grace window passes without a human claiming the lead, which is the
+     * behaviour sdr_settings.grace_period_seconds describes and the reason an
+     * operator gets those seconds to take it themselves.
+     *
+     * Sequential rather than Promise.all: this is real outbound being armed,
+     * and firing forty concurrent invocations at the function to save a second
+     * is the wrong trade. Failures are counted, not thrown — a lead whose
+     * conversation could not be opened is still correctly enrolled, and the
+     * sweep will not pick it up, so the count is worth reporting.
+     */
+    let started = 0;
+    let failed = 0;
+    if (enabled && (row?.enrolled ?? 0) > 0) {
+      for (const leadId of ids) {
+        const { data: out, error: outErr } = await supabase.functions.invoke('ai-sdr', {
+          body: { action: 'initial_outreach', lead_id: leadId },
+        });
+        if (outErr) failed += 1;
+        else if (out?.skipped) failed += 0;   // already had a conversation
+        else started += 1;
+      }
+    }
+
+    setBusy(false);
+    setResult(row ? { ...row, started, failed } : null);
+
+    await onDone?.();
+
+    // Stay open when there is something to report. The panel used to close and
+    // clear on success without a word, which is indistinguishable from having
+    // done nothing at all.
+    if (!enabled) {
       sel.clear();
       setOpen(false);
       setResult(null);
     }
-    await onDone?.();
   }
 
   if (!open) {
@@ -78,9 +119,19 @@ export default function SdrEnrollAction({ sel, onDone, onError }) {
       <button className="btn ghost" disabled={busy} onClick={() => { setOpen(false); setResult(null); }}>
         Cancel
       </button>
-      {result?.skipped > 0 && (
+      {result && (
         <span className="sub">
-          {result.enrolled} added, {result.skipped} skipped — {result.skipped_reason}
+          <strong>{result.enrolled} added</strong>
+          {result.started > 0 && ` · ${result.started} conversation${result.started === 1 ? '' : 's'} opened`}
+          {result.failed > 0 && ` · ${result.failed} could not be started`}
+          {result.skipped > 0 && ` · ${result.skipped} skipped — ${result.skipped_reason}`}
+          {result.enrolled > 0 && (
+            <> — the first message goes out once the grace window passes.</>
+          )}
+          {' '}
+          <button className="linkbtn" onClick={() => { sel.clear(); setOpen(false); setResult(null); }}>
+            done
+          </button>
         </span>
       )}
     </span>

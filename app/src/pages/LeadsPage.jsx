@@ -53,6 +53,7 @@ export default function LeadsPage({ initialView = 'list' }) {
   // consent basis and the suppression list, and picking an SMS audience by any
   // looser test just fills the campaign preview with suppressed rows.
   const [textable, setTextable] = useState('');
+  const [onSdr, setOnSdr] = useState('');
 
   const [dragging, setDragging] = useState(null);
   const [over, setOver] = useState(null);
@@ -120,12 +121,16 @@ export default function LeadsPage({ initialView = 'list' }) {
       if (source && l.source !== source) return false;
       if (textable === 'yes' && !l.dialable) return false;
       if (textable === 'no' && l.dialable) return false;
+      // Enrolment was invisible on every screen in the app, which is why
+      // putting leads on the SDR read as doing nothing at all.
+      if (onSdr === 'yes' && !l.sdr_enabled) return false;
+      if (onSdr === 'no' && l.sdr_enabled) return false;
       if (!needle) return true;
       return [l.name, l.address, l.city, l.zip, l.phone, l.phone_mobile, l.email, l.owner_name]
         .filter(Boolean)
         .some((v) => String(v).toLowerCase().includes(needle));
     });
-  }, [leads, q, status, temp, source, textable]);
+  }, [leads, q, status, temp, source, textable, onSdr]);
 
   // Read off the rows rather than hardcoded: sources arrive from imports and
   // webhooks, so any fixed list goes stale the first time a new vendor is added.
@@ -221,6 +226,11 @@ export default function LeadsPage({ initialView = 'list' }) {
         <select value={source} onChange={(e) => setSource(e.target.value)}>
           <option value="">Any source</option>
           {sources.map((s) => <option key={s} value={s}>{titleize(s)}</option>)}
+        </select>
+        <select value={onSdr} onChange={(e) => setOnSdr(e.target.value)}>
+          <option value="">On the SDR or not</option>
+          <option value="yes">On the AI SDR</option>
+          <option value="no">Not on the SDR</option>
         </select>
         <select value={textable} onChange={(e) => setTextable(e.target.value)}>
           <option value="">Textable or not</option>
@@ -352,7 +362,15 @@ export default function LeadsPage({ initialView = 'list' }) {
                         <span className="sub">{formatPhone(l.phone || l.phone_mobile)}</span>
                       </td>
                       <td className="hide-sm"><span className="badge">{titleize(l.source)}</span></td>
-                      <td><span className="badge">{titleize(l.status)}</span></td>
+                      <td>
+                        <span className="badge">{titleize(l.status)}</span>
+                        {l.sdr_enabled && (
+                          <>
+                            {' '}
+                            <span className="badge ok" title="The AI SDR is working this lead">SDR</span>
+                          </>
+                        )}
+                      </td>
                       <td className="hide-sm"><span className={`badge ${l.temperature}`}>{titleize(l.temperature)}</span></td>
                       <td className="hide-sm sub">{timeAgo(l.created_at)}</td>
                     </tr>
