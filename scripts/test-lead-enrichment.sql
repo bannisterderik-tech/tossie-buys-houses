@@ -73,7 +73,8 @@ begin
   insert into t values ('motivation', coalesce(left(l.motivation,9),'(null)'), 'Inherited');
   insert into t values ('timeline', coalesce(l.timeline,'(null)'), '60 days');
   insert into t values ('condition_notes', coalesce(left(l.condition_notes,10),'(null)'), 'Roof leaks');
-  insert into t values ('occupancy', coalesce(l.occupancy,'(null)'), 'tenant occupied');
+  insert into t values ('occupancy normalised to the CHECK', coalesce(l.occupancy,'(null)'), 'tenant');
+  insert into t values ('vacant derived from occupancy', coalesce(l.vacant::text,'(null)'), 'false');
   insert into t values ('notes', coalesce(left(l.notes,12),'(null)'), 'Please text');
   insert into t values ('"no" -> false', coalesce(l.already_listed::text,'(null)'), 'false');
   insert into t values ('"N" -> false', coalesce(l.vacant::text,'(null)'), 'false');
@@ -95,6 +96,26 @@ begin
   insert into t values ('still inside the grace window (nothing sent)', n::text, '1');
   select count(*) into n from public.lead_activity where lead_id = lid and type in ('consent_recorded','sdr_enrolled');
   insert into t values ('both decisions on the timeline', n::text, '2');
+
+  -- ── a hostile payload must not cost us the lead ─────────────────────────
+  -- This is the bug the first run found: an occupancy string outside the CHECK
+  -- constraint rejected the whole INSERT, so the lead never arrived at all.
+  insert into public.leads (team_id, source, source_detail, status, temperature, raw_payload)
+  values (team, 'vendor', 'zz-test-vendor', 'new', 'cold', $j${
+    "first_name": "Awkward", "last_name": "Payload", "phone": "9125550188",
+    "occupied": "it is complicated, my brother stays there sometimes",
+    "Bedrooms": "four", "Year Built": "N/A", "Asking Price": "make me an offer",
+    "square footage": "", "vacant": "maybe"
+  }$j$::jsonb)
+  returning id into lid;
+  select * into l from public.leads where id = lid;
+  insert into t values ('LEAD STILL ARRIVES on an awkward payload', coalesce(l.name,'(null)'), 'Awkward Payload');
+  insert into t values ('unparseable occupancy -> null, not a violation', coalesce(l.occupancy,'(null)'), '(null)');
+  insert into t values ('"four" is not a number -> null', coalesce(l.beds::text,'(null)'), '(null)');
+  insert into t values ('"N/A" year -> null', coalesce(l.year_built::text,'(null)'), '(null)');
+  insert into t values ('"make me an offer" -> null', coalesce(l.asking_price::text,'(null)'), '(null)');
+  insert into t values ('empty string -> null', coalesce(l.sqft::text,'(null)'), '(null)');
+  insert into t values ('"maybe" is not yes or no', coalesce(l.vacant::text,'(null)'), '(null)');
 
   -- ── a source with neither setting stays cold ────────────────────────────
   update public.lead_sources set consent_basis = null, auto_sdr = false where id = sid;
