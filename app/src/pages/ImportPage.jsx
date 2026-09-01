@@ -1053,6 +1053,14 @@ export default function ImportPage() {
           Not sure? Import it as a cold list. A prospect can become a lead the moment somebody has a
           conversation with them and records how consent was obtained. A lead cannot be un-consented.
         </p>
+
+        {/* On the landing screen, not inside the mapping wizard. A webhook is a
+            standing connection rather than a step in a one-off CSV import, and
+            this is the screen somebody opens when they are thinking about where
+            leads come from. Mounting it below the wizard meant it only appeared
+            after a file had already been picked, which is the one moment nobody
+            is looking for it. */}
+        <LeadSources />
       </>
     );
   }
@@ -1617,11 +1625,6 @@ export default function ImportPage() {
           )}
         </>
       )}
-
-      {/* Live sources, under the one-off CSV import: both are "getting leads
-          in", and a webhook that has been posting for a month belongs on the
-          same screen as the file somebody dragged in once. */}
-      <LeadSources />
 
     </>
   );
