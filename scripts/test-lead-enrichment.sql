@@ -139,4 +139,18 @@ begin
   insert into t select 'cleaned up', count(*)::text, '0' from public.lead_sources where slug='zz-test-vendor';
 end $$;
 
-select step, got, expect, case when got = expect then 'PASS' else 'FAIL' end as result from t;
+-- Verdict on the first row, then any failures, then the rest. A results grid
+-- that has to be scrolled to find out whether it passed is a results grid
+-- nobody reads to the bottom.
+select step, got, expect, result from (
+  select 0 as ord,
+         'SUMMARY — ' || count(*) filter (where got <> expect) || ' failed of ' || count(*) as step,
+         '' as got, '' as expect,
+         case when count(*) filter (where got <> expect) = 0
+              then '*** ALL PASS ***' else '*** SEE FAILURES BELOW ***' end as result
+    from t
+  union all
+  select 1, step, got, expect, 'FAIL' from t where got <> expect
+  union all
+  select 2, step, got, expect, 'PASS' from t where got = expect
+) x order by ord, step;
