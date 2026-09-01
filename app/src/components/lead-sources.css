@@ -1,0 +1,43 @@
+/* Webhook sources. Two values get pasted into somebody else's admin screen, so
+   both are a full-width readonly field with a copy button rather than prose the
+   operator has to select by hand. */
+
+.srcnew { display: flex; gap: 9px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 16px; }
+.srcnew label { display: flex; flex-direction: column; gap: 5px; flex: 1 1 240px; font-size: 0.8rem; font-weight: 700; }
+.srcnew input {
+  padding: 9px 11px; border: 1.5px solid var(--line); border-radius: 8px;
+  font: inherit; font-size: 0.93rem; font-weight: 400;
+}
+
+.srcrow { border: 1px solid var(--line); border-radius: 10px; padding: 13px 15px; }
+.srcrow + .srcrow { margin-top: 11px; }
+.srcrow.off { background: var(--wash); }
+.srchead { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 11px; }
+.srchead .spacer { flex: 1; }
+.srcmeta { margin: 9px 0 0; }
+
+.srcfield { display: flex; align-items: center; gap: 8px; margin-top: 7px; }
+.srcfield .k {
+  flex: 0 0 108px; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--muted); font-weight: 700;
+}
+.srcfield input {
+  flex: 1; min-width: 0;
+  padding: 7px 10px; border: 1.5px solid var(--line); border-radius: 7px;
+  background: var(--wash); color: var(--ink); font-size: 0.86rem;
+}
+.srcfield input.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+
+/* The one-time secret. Loud, because leaving this screen without copying it
+   means rotating it and updating the vendor. */
+.srcsecret {
+  margin-top: 11px; padding: 12px 13px;
+  border: 1.5px solid var(--coral); border-radius: 9px; background: #fdece9;
+}
+.srcsecret > strong { display: block; font-size: 0.88rem; color: var(--coral-deep); }
+.srcsecret .fine { margin: 8px 0 10px; max-width: 66ch; }
+
+@media (max-width: 820px) {
+  .srcfield { flex-wrap: wrap; }
+  .srcfield .k { flex: 1 1 100%; }
+}

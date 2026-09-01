@@ -4,6 +4,7 @@ import { navigate } from '../router.js';
 import { TEAM_ID } from '../lib/team.js';
 import { parseCsv, normalizeHeader } from '../lib/csv.js';
 import './ImportPage.css';
+import LeadSources from '../components/LeadSources.jsx';
 
 /**
  * CSV import — the lists Tossie had before this system existed, plus whatever a
@@ -1616,6 +1617,12 @@ export default function ImportPage() {
           )}
         </>
       )}
+
+      {/* Live sources, under the one-off CSV import: both are "getting leads
+          in", and a webhook that has been posting for a month belongs on the
+          same screen as the file somebody dragged in once. */}
+      <LeadSources />
+
     </>
   );
 }

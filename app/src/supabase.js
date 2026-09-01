@@ -28,6 +28,13 @@ const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || FALLBACK_ANON_KEY;
 
 export const isConfigured = Boolean(url && anonKey);
 
+/**
+ * The project's base URL, exported so a screen can show an operator the full
+ * endpoint a third party has to post to. Not a secret — it is the host every
+ * request in this bundle already goes to.
+ */
+export const SUPABASE_URL = url;
+
 export const supabase = isConfigured
   ? createClient(url, anonKey, {
       auth: {
