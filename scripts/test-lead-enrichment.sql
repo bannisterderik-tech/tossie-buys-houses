@@ -78,7 +78,7 @@ begin
   insert into t values ('condition_notes', coalesce(left(l.condition_notes,10),'(null)'), 'Roof leaks');
   insert into t values ('occupancy normalised to the CHECK', coalesce(l.occupancy,'(null)'), 'tenant');
   insert into t values ('vacant derived from occupancy', coalesce(l.vacant::text,'(null)'), 'false');
-  insert into t values ('notes', coalesce(left(l.notes,12),'(null)'), 'Please text');
+  insert into t values ('notes', coalesce(left(l.notes,11),'(null)'), 'Please text');
   insert into t values ('"no" -> false', coalesce(l.already_listed::text,'(null)'), 'false');
   insert into t values ('"N" -> false', coalesce(l.vacant::text,'(null)'), 'false');
   insert into t values ('"yes" -> true', coalesce(l.pre_foreclosure::text,'(null)'), 'true');
@@ -118,7 +118,12 @@ begin
   insert into t values ('"N/A" year -> null', coalesce(l.year_built::text,'(null)'), '(null)');
   insert into t values ('"make me an offer" -> null', coalesce(l.asking_price::text,'(null)'), '(null)');
   insert into t values ('empty string -> null', coalesce(l.sqft::text,'(null)'), '(null)');
-  insert into t values ('"maybe" is not yes or no', coalesce(l.vacant::text,'(null)'), '(null)');
+  -- leads.vacant is NOT NULL DEFAULT false, so an unrecognised value cannot
+  -- leave it null — coalesce keeps the default. What matters is that "maybe"
+  -- is not read as a yes, which is what payload_bool is asserted on directly.
+  insert into t values ('"maybe" does not become true', coalesce(l.vacant::text,'(null)'), 'false');
+  insert into t values ('payload_bool("maybe") is null, not false',
+    coalesce((public.payload_bool('{"vacant":"maybe"}'::jsonb,'vacant'))::text,'(null)'), '(null)');
 
   -- ── a source with neither setting stays cold ────────────────────────────
   update public.lead_sources set consent_basis = null, auto_sdr = false where id = sid;
