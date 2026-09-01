@@ -15,7 +15,7 @@ import { MAX_BODY, deliveryState, explainRefusal, refusalFrom } from '../lib/sms
 import { TEAM_ID } from '../lib/team.js';
 import {
   STATUSES, TEMPERATURES, OCCUPANCY,
-  titleize, formatPhone, fullAddress, fullDate, timeAgo,
+  titleize, formatPhone, fullAddress, fullDate, timeAgo, sourceLabel
 } from '../lib/format.js';
 import './lead-comms.css';
 import './delivery-status.css';
@@ -661,7 +661,7 @@ export default function LeadDetail({ id }) {
             <h2>Capture</h2>
             <div className="body">
               <dl className="facts">
-                <dt>Source</dt><dd>{titleize(lead.source)}</dd>
+                <dt>Source</dt><dd>{sourceLabel(lead)}</dd>
                 <dt>Page</dt><dd style={{ wordBreak: 'break-all' }}>{lead.page_path || '—'}</dd>
                 <dt>Created</dt><dd>{fullDate(lead.created_at)}</dd>
               </dl>

@@ -35,6 +35,51 @@ export const OCCUPANCY = ['owner', 'tenant', 'vacant', 'unknown'];
 export const titleize = (s) =>
   !s ? '' : s.replace(/[_-]/g, ' ').replace(/^./, (c) => c.toUpperCase());
 
+/**
+ * Where a lead came from, in the words somebody would use for it.
+ *
+ * `source` is a category and only a handful of values wide — 'vendor',
+ * 'cold_list', 'website'. `source_detail` is the specific one: which vendor,
+ * which bought list. Rendering only the category is why every lead arriving
+ * over a webhook read as "Vendor" on the list, whether it came from
+ * PropertyLeads or Speed to Lead, and that is precisely the distinction
+ * somebody is scanning the column for.
+ *
+ * The detail wins when there is one. It is stored as the source's slug, so the
+ * hyphens are unpicked the same way titleize unpicks underscores — and the
+ * small words are lowered afterwards, because "Speed To Lead" is not what
+ * anybody calls it.
+ *
+ * Nothing is invented: a lead with no detail still shows its category, which
+ * is all that was ever known about it.
+ */
+const SMALL_WORDS = new Set(['a', 'an', 'and', 'as', 'at', 'by', 'for', 'in', 'of', 'on', 'or', 'the', 'to']);
+
+export function sourceLabel(lead) {
+  const detail = String(lead?.source_detail ?? '').trim();
+  if (!detail) return titleize(lead?.source);
+
+  // Only a slug gets unpicked. Anything carrying a space or a capital was typed
+  // by a person — a bought list called "Georgia(0-500)", a vendor who spells
+  // itself PropertyLeads.com — and turning its hyphens into spaces would be the
+  // app rewriting somebody's own label.
+  if (/[A-Z\s]/.test(detail)) return detail;
+
+  return detail
+    .replace(/[_-]+/g, ' ')
+    .trim()
+    .split(/\s+/)
+    .map((w, i) => {
+      // A word that already carries capitals is a name somebody typed —
+      // "PropertyLeads.com" — and re-casing it would be the app deciding it
+      // knows better than the person who entered it.
+      if (/[A-Z]/.test(w)) return w;
+      if (i > 0 && SMALL_WORDS.has(w.toLowerCase())) return w.toLowerCase();
+      return w.charAt(0).toUpperCase() + w.slice(1);
+    })
+    .join(' ');
+}
+
 /** '9125550134' -> '(912) 555-0134'; anything else passes through. */
 export function formatPhone(v) {
   if (!v) return '';

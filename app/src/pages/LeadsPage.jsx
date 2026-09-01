@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '../supabase.js';
 import { navigate } from '../router.js';
-import { STATUSES, TEMPERATURES, titleize, formatPhone, fullAddress, timeAgo } from '../lib/format.js';
+import { STATUSES, TEMPERATURES, titleize, formatPhone, fullAddress, timeAgo, sourceLabel } from '../lib/format.js';
 import useBulkSelect from '../lib/useBulkSelect.js';
 import BulkBar from '../components/BulkBar.jsx';
 import { stashSelection } from '../lib/campaignHandoff.js';
@@ -361,7 +361,7 @@ export default function LeadsPage({ initialView = 'list' }) {
                         {l.name || l.owner_name || '—'}
                         <span className="sub">{formatPhone(l.phone || l.phone_mobile)}</span>
                       </td>
-                      <td className="hide-sm"><span className="badge">{titleize(l.source)}</span></td>
+                      <td className="hide-sm"><span className="badge">{sourceLabel(l)}</span></td>
                       <td>
                         <span className="badge">{titleize(l.status)}</span>
                         {l.sdr_enabled && (

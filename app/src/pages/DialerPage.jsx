@@ -6,7 +6,7 @@ import DialCampaigns from '../components/DialCampaigns.jsx';
 import BuyerOnDeck from '../components/BuyerOnDeck.jsx';
 import { SoftphoneControl, SoftphoneNotice, useSoftphone } from '../components/Softphone.jsx';
 import { callingWindow } from '../lib/calling-window.js';
-import { formatPhone, fullAddress, titleize, timeAgo, fullDate } from '../lib/format.js';
+import { formatPhone, fullAddress, titleize, timeAgo, fullDate, sourceLabel } from '../lib/format.js';
 
 /** A day's work, not a database dump. Past this the operator reloads. */
 const QUEUE_LIMIT = 200;
@@ -425,7 +425,7 @@ function OnDeck({ lead, at, of, now, sp, onSkip, onDone }) {
             <Fact k="Last contact" v={lead.last_contacted_at ? timeAgo(lead.last_contacted_at) : 'never'} />
             <Fact k="Due" v={lead.next_follow_up_at ? fullDate(lead.next_follow_up_at) : 'not scheduled'} />
             <Fact k="Status" v={titleize(lead.status)} />
-            <Fact k="Source" v={titleize(lead.source)} />
+            <Fact k="Source" v={sourceLabel(lead)} />
           </div>
 
           {(lead.motivation || lead.timeline) && (
