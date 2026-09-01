@@ -23,8 +23,11 @@
  * be told so, not shown an empty form that fails on submit.
  */
 
-import { createClient } from '@supabase/supabase-js';
-
+// Plain fetch against PostgREST and the Storage API, not @supabase/supabase-js.
+// There are no dependencies at the repo root — api/lead.js talks to the REST
+// endpoint directly for exactly this reason — so importing the client library
+// here fails at invocation with FUNCTION_INVOCATION_FAILED, before any of the
+// error handling below can report anything useful.
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://fvkxdhuwfjnsvkjjordm.supabase.co';
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 
@@ -55,23 +58,44 @@ function readRaw(req, limit) {
   });
 }
 
-function db() {
-  if (!SERVICE_KEY) return null;
-  return createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
+const svc = () => ({
+  apikey: SERVICE_KEY,
+  Authorization: `Bearer ${SERVICE_KEY}`,
+});
+
+/** One PostgREST call. Returns parsed rows, or throws with the API's message. */
+async function rest(path, { method = 'GET', body, prefer } = {}) {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+    method,
+    headers: {
+      ...svc(),
+      'Content-Type': 'application/json',
+      ...(prefer ? { Prefer: prefer } : {}),
+    },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  });
+  const text = await r.text();
+  if (!r.ok) throw new Error(`${r.status} ${text.slice(0, 300)}`);
+  if (!text) return null;
+  try { return JSON.parse(text); } catch { return null; }
 }
 
 /**
  * The token, the portal, and the lead — or a reason it cannot be used.
  * One place, so every entry point refuses identically.
  */
-async function resolve(admin, token) {
+async function resolve(token) {
   if (!token || !/^[a-f0-9]{32}$/.test(token)) return { error: 'That link is not valid.' };
 
-  const { data: p } = await admin
-    .from('lead_portals')
-    .select('*, leads(id, name, address, city, state, zip, beds, baths, asking_price, timeline, occupancy)')
-    .eq('token', token)
-    .maybeSingle();
+  const select = '*,leads(id,name,address,city,state,zip,beds,baths,asking_price,timeline,occupancy)';
+  let rows;
+  try {
+    rows = await rest(`lead_portals?token=eq.${encodeURIComponent(token)}&select=${encodeURIComponent(select)}&limit=1`);
+  } catch (e) {
+    console.error('[portal] lookup failed:', e.message);
+    return { error: 'We cannot open this right now. Please try again shortly.' };
+  }
+  const p = Array.isArray(rows) ? rows[0] : null;
 
   if (!p) return { error: 'That link is not valid.' };
   if (p.revoked_at) return { error: 'That link has been turned off. Reply to our text and we will send a new one.' };
@@ -82,8 +106,7 @@ async function resolve(admin, token) {
 }
 
 export default async function handler(req, res) {
-  const admin = db();
-  if (!admin) {
+  if (!SERVICE_KEY) {
     console.error('[portal] SUPABASE_SERVICE_KEY is not set');
     return res.status(503).send(shell('We cannot open this right now', '<p>Please try again shortly.</p>'));
   }
@@ -91,7 +114,7 @@ export default async function handler(req, res) {
   const token = String(req.query.t || '').trim().toLowerCase();
   const action = String(req.query.do || '').trim();
 
-  const r = await resolve(admin, token);
+  const r = await resolve(token);
   if (r.error) {
     if (req.method === 'POST') return res.status(404).json({ error: r.error });
     return res.status(404).send(shell('Link not available', `<p>${esc(r.error)}</p>`));
@@ -101,8 +124,10 @@ export default async function handler(req, res) {
   // ── the form ──────────────────────────────────────────────────────────────
   if (req.method === 'GET') {
     if (!portal.first_opened_at) {
-      await admin.from('lead_portals')
-        .update({ first_opened_at: new Date().toISOString() }).eq('id', portal.id);
+      // Best effort: a failure here must not stop the seller seeing the form.
+      rest(`lead_portals?id=eq.${portal.id}`, {
+        method: 'PATCH', body: { first_opened_at: new Date().toISOString() },
+      }).catch((e) => console.error('[portal] open stamp failed:', e.message));
     }
     return res.status(200).send(formPage(portal, lead));
   }
@@ -136,33 +161,45 @@ export default async function handler(req, res) {
     // first, so the storage policies scope on it without a join.
     const path = `${portal.team_id}/lead/${portal.lead_id}/${id}.${ext}`;
 
-    const { error: upErr } = await admin.storage.from(BUCKET)
-      .upload(path, buf, { contentType: ct.split(';')[0] });
-    if (upErr) {
-      console.error('[portal] upload failed:', upErr.message);
+    const mime = ct.split(';')[0];
+    const up = await fetch(`${SUPABASE_URL}/storage/v1/object/${BUCKET}/${path}`, {
+      method: 'POST',
+      headers: { ...svc(), 'Content-Type': mime, 'x-upsert': 'false' },
+      body: buf,
+    });
+    if (!up.ok) {
+      console.error('[portal] upload failed:', up.status, (await up.text()).slice(0, 200));
       return res.status(502).json({ error: 'That photo did not save. Please try again.' });
     }
 
-    const { error: rowErr } = await admin.from('property_photos').insert({
-      id,
-      team_id: portal.team_id,
-      lead_id: portal.lead_id,
-      bucket: BUCKET,
-      storage_path: path,
-      file_name: `seller-upload.${ext}`,
-      mime_type: ct.split(';')[0],
-      size_bytes: buf.length,
-      caption: 'Sent by the seller',
-    });
-    if (rowErr) {
-      // The row is the record; a file with no row is invisible to every screen.
-      await admin.storage.from(BUCKET).remove([path]);
-      console.error('[portal] photo row failed:', rowErr.message);
+    try {
+      await rest('property_photos', {
+        method: 'POST',
+        body: {
+          id,
+          team_id: portal.team_id,
+          lead_id: portal.lead_id,
+          bucket: BUCKET,
+          storage_path: path,
+          file_name: `seller-upload.${ext}`,
+          mime_type: mime,
+          size_bytes: buf.length,
+          caption: 'Sent by the seller',
+        },
+      });
+    } catch (e) {
+      // The row is the record; a file with no row is invisible to every screen
+      // and to RLS, so it goes back out rather than sitting in the bucket.
+      await fetch(`${SUPABASE_URL}/storage/v1/object/${BUCKET}/${path}`, {
+        method: 'DELETE', headers: svc(),
+      }).catch(() => {});
+      console.error('[portal] photo row failed:', e.message);
       return res.status(500).json({ error: 'That photo did not save. Please try again.' });
     }
 
-    await admin.from('lead_portals')
-      .update({ photo_count: portal.photo_count + 1 }).eq('id', portal.id);
+    await rest(`lead_portals?id=eq.${portal.id}`, {
+      method: 'PATCH', body: { photo_count: portal.photo_count + 1 },
+    }).catch((e) => console.error('[portal] photo count failed:', e.message));
 
     return res.status(200).json({ ok: true, count: portal.photo_count + 1 });
   }
@@ -190,21 +227,23 @@ export default async function handler(req, res) {
       answers[k] = typeof body[k] === 'boolean' ? body[k] : String(body[k]).slice(0, 2000);
     }
 
-    const { error } = await admin.from('lead_portals').update({
-      answers: { ...(portal.answers || {}), ...answers },
-      submitted_at: new Date().toISOString(),
-    }).eq('id', portal.id);
-    if (error) {
-      console.error('[portal] save failed:', error.message);
+    try {
+      await rest(`lead_portals?id=eq.${portal.id}`, {
+        method: 'PATCH',
+        body: {
+          answers: { ...(portal.answers || {}), ...answers },
+          submitted_at: new Date().toISOString(),
+        },
+      });
+    } catch (e) {
+      console.error('[portal] save failed:', e.message);
       return res.status(500).json({ error: 'That did not save. Please try again.' });
     }
 
-    const { error: mergeErr } = await admin.rpc('apply_portal_answers', { p_portal_id: portal.id });
-    if (mergeErr) {
-      // Their answers are stored either way; the merge is what the operator
-      // sees on the lead. Worth logging, not worth telling the seller.
-      console.error('[portal] merge failed:', mergeErr.message);
-    }
+    // Their answers are stored either way; the merge is what the operator sees
+    // on the lead. Worth logging, not worth telling the seller about.
+    await rest('rpc/apply_portal_answers', { method: 'POST', body: { p_portal_id: portal.id } })
+      .catch((e) => console.error('[portal] merge failed:', e.message));
 
     return res.status(200).json({ ok: true });
   }
