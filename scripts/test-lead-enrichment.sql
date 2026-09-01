@@ -64,7 +64,10 @@ begin
   insert into t values ('email', coalesce(l.email,'(null)'), 'doris@example.test');
   insert into t values ('address', coalesce(l.address,'(null)'), '1408 East Duffy Street');
   insert into t values ('state from "ST"', coalesce(l.state,'(null)'), 'GA');
-  insert into t values ('beds', coalesce(l.beds::text,'(null)'), '3');
+  insert into t values ('beds', coalesce(l.beds::text,'(null)'), '3.0');
+  -- numeric(4,1) exists so half-bedrooms survive; prove the cast does not eat one.
+  insert into t values ('a half bedroom survives',
+    coalesce((public.payload_number('{"bedrooms":"3.5"}'::jsonb,'beds'))::text,'(null)'), '3.5');
   insert into t values ('baths keeps the half', coalesce(l.baths::text,'(null)'), '2.5');
   insert into t values ('sqft strips the comma', coalesce(l.sqft::text,'(null)'), '1420');
   insert into t values ('year_built', coalesce(l.year_built::text,'(null)'), '1948');

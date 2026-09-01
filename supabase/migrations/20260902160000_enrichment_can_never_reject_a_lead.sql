@@ -88,7 +88,10 @@ BEGIN
     NEW.county        := coalesce(NEW.county,        public.payload_value(f, 'county'));
     NEW.property_type := coalesce(NEW.property_type, public.payload_value(f, 'property_type'));
 
-    NEW.beds  := coalesce(NEW.beds,  public.payload_number(f, 'beds')::int);
+    -- beds is numeric(4,1), not an integer. The ::int cast this used to carry
+    -- would have quietly turned a 3.5-bedroom house into a 3-bedroom one —
+    -- found because the test expected '3' and the column returned '3.0'.
+    NEW.beds  := coalesce(NEW.beds,  public.payload_number(f, 'beds'));
     NEW.baths := coalesce(NEW.baths, public.payload_number(f, 'baths'));
     NEW.sqft  := coalesce(NEW.sqft,  public.payload_number(f, 'sqft')::int);
     NEW.year_built := coalesce(NEW.year_built,
