@@ -46,7 +46,7 @@ export default function LeadSources() {
       supabase.from('lead_sources').select('*').order('created_at'),
       // The rejections are the half worth reading: a run of rejected_auth on a
       // live slug is the only place a leaked secret would ever show itself.
-      supabase.from('lead_intake_log').select('*').order('created_at', { ascending: false }).limit(25),
+      supabase.from('lead_intake_log').select('*').order('received_at', { ascending: false }).limit(25),
     ]);
     if (s.error) setErr(s.error.message);
     setSources(s.data ?? []);
@@ -240,7 +240,7 @@ export default function LeadSources() {
                         {r.outcome.replace(/_/g, ' ')}
                       </span>
                     </td>
-                    <td className="hide-sm sub">{fullDate(r.created_at)}</td>
+                    <td className="hide-sm sub">{fullDate(r.received_at)}</td>
                   </tr>
                 ))}
               </tbody>
