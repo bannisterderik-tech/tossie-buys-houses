@@ -7,6 +7,7 @@ import InlineField from '../components/InlineField.jsx';
 import PropertyLinks from '../components/PropertyLinks.jsx';
 import PhotoGallery from '../components/PhotoGallery.jsx';
 import ContractPanel from '../components/ContractPanel.jsx';
+import PortalLink from '../components/PortalLink.jsx';
 import DispositionBar from '../components/DispositionBar.jsx';
 import { DeliveryChip, DeliveryFailure } from '../components/DeliveryState.jsx';
 import { SoftphoneControl, SoftphoneNotice, useSoftphone } from '../components/Softphone.jsx';
@@ -555,6 +556,10 @@ export default function LeadDetail({ id }) {
               before there is a contract, and they carry into the deal on their
 
           <PhotoGallery subject="lead" subjectId={id} teamId={lead.team_id} />
+
+          {/* Directly under the gallery, because the photos this produces land
+              in it. */}
+          <PortalLink leadId={id} />
           </div>
         </div>
       )}
