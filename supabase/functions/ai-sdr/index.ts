@@ -46,6 +46,7 @@
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { prepareUntrusted, sanitizeUntrusted } from '../_shared/prompt-safety.ts';
+import { areaCodeFromPhone, resolveTimezone } from '../_shared/phone-timezone.ts';
 import { getCorsHeaders, jsonResponse } from '../_shared/cors.ts';
 import { normalizeE164 } from '../_shared/phone-validation.ts';
 
@@ -70,6 +71,44 @@ const MODEL = 'claude-sonnet-5';
 // One SMS segment. Longer messages get split by the carrier, read as marketing,
 // and answered less.
 const SMS_CHAR_TARGET = 160;
+
+/** Where the seller's property form lives. */
+const PUBLIC_SITE_URL = Deno.env.get('PUBLIC_SITE_URL')
+  || 'https://tossie-buys-houses.vercel.app';
+
+/**
+ * The steps at which a property form is worth sending.
+ *
+ * Not before. A link that arrives before somebody has told you anything reads
+ * as a form to fill in for a stranger, and the whole point of asking the
+ * questions first is that by the time it lands they already know why.
+ *
+ * These are all existing steps. Adding a 'photos' step would have been tidier
+ * to read and would have broken the conversation it was in the middle of:
+ * sdr_conversations.step is CHECK-constrained, so the first turn that tried to
+ * move there would have failed its UPDATE.
+ */
+const READY_FOR_FORM = new Set(['decision_makers', 'appointment', 'completed']);
+
+/**
+ * The seller's timezone, from the phone they answer on.
+ *
+ * Deliberately the same source _shared/phone-timezone.ts uses for the calling
+ * window: the area code of the number being contacted, falling back to the
+ * mailing state and then to Eastern. An absentee owner in California with a
+ * Georgia rental is in California, and "tomorrow at 9" has to mean theirs.
+ */
+function timezoneForLead(lead: Record<string, unknown>): string {
+  const phone = String(lead.phone_mobile ?? lead.phone ?? '');
+  // Mailing state before property state: an absentee owner in California with a
+  // Georgia rental answers the phone in California, and "tomorrow at 9" has to
+  // mean theirs. resolveTimezone falls back to Eastern and says so.
+  const { tz } = resolveTimezone({
+    areaCode: areaCodeFromPhone(phone),
+    state: String(lead.mailing_state ?? lead.state ?? ''),
+  });
+  return tz;
+}
 
 // ─── the draft/auto choke point ─────────────────────────────────────────────
 // Called from exactly one place. Auto-send needs BOTH halves: a stored mode of
@@ -163,9 +202,17 @@ price_expectation What number do THEY have in mind. Ask for theirs. Never offer
                   one, never react to theirs with a counter, never say whether it
                   is high or low.
 decision_makers   Is anyone else on the deed or does anyone else have to agree.
-                  Finding this out at the appointment is finding it out too late.
-appointment       Ask for a time to walk the property. That is the goal of the
-                  whole conversation.
+                  Finding this out later is finding it out too late.
+appointment       Two things, in this order.
+
+                  First, send the property form link from THIS SELLER below and
+                  ask for photos -- outside, kitchen, bathrooms, and whatever
+                  needs work. Only once every question above has an answer. A
+                  link that arrives before they have told you anything reads as
+                  a form to fill in for a stranger.
+
+                  Then ask for a time for Tossie to CALL them. A phone call, not
+                  a visit, on a day and at an hour they name.
 `.trim();
 
 // ─── tools ──────────────────────────────────────────────────────────────────
@@ -232,7 +279,7 @@ const TOOLS = [
   {
     name: 'book_appointment',
     description:
-      'Book a walkthrough once the seller has agreed to a specific day and time. Do not call this on a vague "sometime next week" — pin the time down first.',
+      'Book a PHONE CALL from Tossie once the seller has agreed to a specific day and time. Never an in-person visit. Do not call this on a vague "sometime next week" — pin the day and the hour down first, and use the seller local time given under THIS SELLER rather than guessing what "tomorrow morning" means.',
     input_schema: {
       type: 'object',
       properties: {
@@ -358,6 +405,10 @@ function buildSystemPrompt(opts: {
   qualification: Record<string, unknown>;
   isDrip: boolean;
   persona?: Record<string, any> | null;
+  /** The seller's own property form, minted per lead. Absent until discovery. */
+  portalUrl?: string | null;
+  /** Now, in the seller's own timezone, spelled out for the model to reason from. */
+  nowLocal: string;
 }): { stable: string; volatile: string } {
   // Keyed rather than indexed by a bare `any`: the persona's personality comes
   // out of the database untyped, and an unrecognised value has to fall through
@@ -426,10 +477,39 @@ If somebody asks directly whether they are talking to a real person: do not answ
 ${tone}
 - ONE question per message. Ask it, then stop and wait.
 - Under ${SMS_CHAR_TARGET} characters. This is a text message, not an email.
-- No greetings like "I hope this finds you well". No emoji. No ALL CAPS. No exclamation marks stacked up.
-- Plain words. "How soon do you need to be out?" not "What is your anticipated disposition timeline?"
 - If they answer something, acknowledge it in a few words before asking the next thing.
 - Never send two messages in a row without a reply in between.
+
+WORDS THAT MAKE THIS READ AS MARKETING. Carriers score them and so do people,
+and this account already has messages being filtered. Never write: guarantee,
+guaranteed, cash offer, free, no obligation, act now, limited time, urgent,
+100%, best price, top dollar, offer expires, click here, congratulations, risk
+free, why wait, don't miss out, exclusive, special deal, apply now. No ALL CAPS
+words. No exclamation marks. No emoji. No link shorteners -- send the full URL
+you were given or none at all.
+
+WORDS THAT MAKE THIS READ AS A MACHINE. These are the tells people actually
+notice, and they are not subtle once you know them. Never write: delve,
+tapestry, landscape, pivotal, underscore, testament, intricate, meticulous,
+nuanced, multifaceted, embark, spearhead, bolster, garner, realm, crucial,
+foster, enhance, leverage, navigate, resonate, illuminate, showcase, robust,
+holistic, comprehensive, seamless, streamline, elevate, unlock, empower,
+journey, furthermore, moreover, additionally, consequently, nevertheless.
+
+SENTENCE SHAPES THAT GIVE IT AWAY, which matter more than the words:
+- "Not X, but Y." Just say what is true.
+- Three things in a list -- "quick, easy and fair". Say the one that matters.
+- A question you then answer yourself. "What does that mean? It means..."
+- "Here's the thing" / "Here's what most people don't know".
+- "Let's dive in" / "let me break this down".
+- A colon used for a reveal. "The result: a fast close."
+- Em dashes where a comma or a full stop would do.
+- Every message landing on a tidy summarising note. Let one just end.
+
+HOW A PERSON ACTUALLY TEXTS. Contractions every time -- "I'll", "you're",
+"that's", "can't". Plain words: "how soon do you need to be out", not "what is
+your anticipated timeline". Start with the point. It is fine to be slightly
+uneven; a text that scans like a press release is the one that gets ignored.
 
 === WHAT YOU NEVER DO ===
 - Never quote, estimate or negotiate a price (above).
@@ -461,7 +541,12 @@ Source: ${opts.lead.source || 'unknown'}${opts.lead.source_detail ? ` (${opts.le
 ${known ? `Answers so far:\n${known}` : 'No answers recorded yet.'}
 ${opts.isDrip ? '\nThis is a follow-up to a message they have not replied to. Try a different angle than last time, keep it shorter than last time, and make it easy to say "not interested" — a clean no is worth more than silence.' : ''}
 
-Today is ${new Date().toISOString().slice(0, 10)}.`;
+${opts.portalUrl ? `\nTHE PROPERTY FORM FOR THIS SELLER: ${opts.portalUrl}\nSend that exact URL, in full, once every question above has an answer. Say plainly what it is: somewhere to add photos and fill in the details, takes a couple of minutes, and it means Tossie is not asking them the same things again on the call. Do not shorten it and do not send it more than once.` : ''}
+
+Right now it is ${opts.nowLocal}. When you agree a time with them, that is the
+clock you are both on -- "tomorrow at 10" means their tomorrow. Never propose a
+time that has already passed, and never propose anything before 8am or after
+9pm their time.`;
 
   return { stable, volatile };
 }
@@ -946,6 +1031,27 @@ async function executeTurn(
     .limit(1)
     .maybeSingle();
 
+  // The seller's local clock, not the server's. Every time this conversation
+  // agrees is in their zone, and a model told only the date will happily
+  // propose 7am or a slot that has already gone.
+  const zone = timezoneForLead(lead);
+  const nowLocal = new Date().toLocaleString('en-US', {
+    timeZone: zone,
+    weekday: 'long', month: 'long', day: 'numeric',
+    hour: 'numeric', minute: '2-digit', timeZoneName: 'short',
+  });
+
+  // Minted only once there is something worth sending it about. lead_portal_token
+  // reuses a live link, so asking on every turn does not litter the table.
+  let portalUrl: string | null = null;
+  if (READY_FOR_FORM.has(String(opts.step))) {
+    const { data: tok, error: tokErr } = await admin.rpc('lead_portal_token', {
+      p_lead_id: lead.id,
+    });
+    if (tokErr) console.error('[ai-sdr] portal token failed:', tokErr.message);
+    else if (tok) portalUrl = `${PUBLIC_SITE_URL}/api/portal?t=${tok}`;
+  }
+
   const system = buildSystemPrompt({
     teamName: opts.teamName,
     personality: settings.personality,
@@ -954,6 +1060,8 @@ async function executeTurn(
     qualification: state.qualification,
     isDrip: opts.isDrip,
     persona,
+    portalUrl,
+    nowLocal,
   });
 
   const claudeMessages: Array<{ role: 'user' | 'assistant'; content: unknown }> = [
