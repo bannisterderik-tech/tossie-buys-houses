@@ -1084,13 +1084,28 @@ function Recording({ callId }) {
     setBusy(false);
     if (error) {
       // The function answers with JSON on every refusal, and that sentence is
-      // more use than "FunctionsHttpError".
+      // more use than "FunctionsHttpError". The status goes on the end because
+      // it separates causes that read identically: a 401 is the gateway
+      // refusing before the function ran, a 400 is the function's own URL
+      // check, a 404 is the row not being readable as this user.
       let msg = error.message;
+      let status = error.context?.status ?? '';
       try {
         const body = await error.context?.json?.();
         if (body?.error) msg = body.error;
       } catch { /* keep the generic one */ }
-      setErr(msg);
+      // Logged as well as shown: the inline text is narrow, and this is the
+      // one failure where the exact wording decides which branch to fix.
+      console.error('[recording]', status, msg, error);
+      setErr(status ? `${msg} (HTTP ${status})` : msg);
+      return;
+    }
+    if (!data) { setErr('The function returned nothing at all.'); return; }
+    if (!(data instanceof Blob)) {
+      // supabase-js picks a parser from the response Content-Type. Anything
+      // but a Blob here means the audio came back labelled as something else,
+      // and createObjectURL would fail with a far less useful message.
+      setErr(`Expected audio, got ${typeof data}. ${String(data).slice(0, 120)}`);
       return;
     }
     setSrc(URL.createObjectURL(data));
