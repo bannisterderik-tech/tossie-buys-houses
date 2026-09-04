@@ -16,7 +16,7 @@ import { MAX_BODY, deliveryState, explainRefusal, refusalFrom } from '../lib/sms
 import { TEAM_ID } from '../lib/team.js';
 import {
   STATUSES, TEMPERATURES, OCCUPANCY,
-  titleize, formatPhone, fullAddress, fullDate, timeAgo, sourceLabel, personAndPlace
+  titleize, formatPhone, fullAddress, fullDate, timeAgo, sourceLabel
 } from '../lib/format.js';
 import './lead-comms.css';
 import './delivery-status.css';
@@ -378,11 +378,15 @@ export default function LeadDetail({ id }) {
   return (
     <>
       <header>
-        <h1>{lead.address || lead.name || 'Lead'}</h1>
-        {/* The seller, not the street again. fullAddress() opens with the
-            address, so this line used to repeat the h1 word for word and left
-            the name — the thing you want before dialling — nowhere on screen. */}
-        <span className="count">{personAndPlace(lead)}</span>
+        {/* The person, not the property. Tossie asked for the name and then
+            asked for it bigger — so it is the heading, and the address moves
+            to the line underneath where it no longer repeats itself.
+
+            Falls back to the address when there is no name: on a bought list
+            that is the ordinary case, and "No name yet" as a page title is
+            worse than the street it belongs to. */}
+        <h1>{lead.name || lead.owner_name || lead.address || 'Lead'}</h1>
+        <span className="count">{fullAddress(lead)}</span>
       </header>
 
       {err && <div className="err">{err}</div>}

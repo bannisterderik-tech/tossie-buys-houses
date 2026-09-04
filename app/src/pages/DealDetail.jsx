@@ -233,12 +233,10 @@ function DealHead({ deal }) {
   return (
     <header className="dealhead">
       <div>
-        <h1>{deal.address}</h1>
+        {/* Same order as the lead page: the person, then the property. */}
+        <h1>{deal.lead?.name || deal.address}</h1>
         <p className="sub">
-          {/* The seller's name first, on every screen about them. A deal page
-              titled only by its street makes you open the lead to find out who
-              you are about to ring. */}
-          {deal.lead?.name && <><strong>{deal.lead.name}</strong>{' · '}</>}
+          {deal.lead?.name && <><strong>{deal.address}</strong>{' · '}</>}
           {[[deal.city, deal.state].filter(Boolean).join(', '), deal.zip].filter(Boolean).join(' ')}
           {deal.county ? ` · ${deal.county} County` : ''}
           {' · '}<a href="/app/deals">All deals</a>
