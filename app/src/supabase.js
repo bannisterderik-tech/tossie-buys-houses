@@ -35,6 +35,13 @@ export const isConfigured = Boolean(url && anonKey);
  */
 export const SUPABASE_URL = url;
 
+/**
+ * The anon key, exported for the few places that call an edge function with a
+ * plain fetch rather than supabase.functions.invoke. Not a secret — it is in
+ * this bundle already and grants nothing without RLS letting it.
+ */
+export const SUPABASE_ANON_KEY = anonKey;
+
 export const supabase = isConfigured
   ? createClient(url, anonKey, {
       auth: {

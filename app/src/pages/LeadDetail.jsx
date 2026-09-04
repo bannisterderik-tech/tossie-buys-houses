@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { supabase } from '../supabase.js';
+import { supabase, SUPABASE_URL, SUPABASE_ANON_KEY } from '../supabase.js';
 import { navigate } from '../router.js';
 import DeleteButton from '../components/DeleteButton.jsx';
 import FollowUpField from '../components/FollowUpField.jsx';
@@ -1078,37 +1078,48 @@ function Recording({ callId }) {
   async function play() {
     setBusy(true);
     setErr(null);
-    const { data, error } = await supabase.functions.invoke('call-recording', {
-      body: { call_id: callId },
-    });
+    // A plain fetch, not supabase.functions.invoke.
+    //
+    // invoke picks how to read the body from the response Content-Type, and it
+    // only returns a Blob for application/octet-stream. Anything else — audio
+    // /mpeg included — falls through to its default branch and is read with
+    // .text(). The recording arrived intact and was decoded as UTF-8, which is
+    // why this failed as a wall of replacement characters rather than as an
+    // error: nothing went wrong on the wire, the bytes were just parsed as
+    // prose. Asking for the bytes directly is the honest way to want bytes.
+    const { data: { session } } = await supabase.auth.getSession();
+    let res;
+    try {
+      res = await fetch(`${SUPABASE_URL}/functions/v1/call-recording`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: SUPABASE_ANON_KEY,
+          Authorization: `Bearer ${session?.access_token ?? ''}`,
+        },
+        body: JSON.stringify({ call_id: callId }),
+      });
+    } catch (e) {
+      setBusy(false);
+      setErr(`Could not reach the recording service. ${e.message}`);
+      return;
+    }
     setBusy(false);
-    if (error) {
-      // The function answers with JSON on every refusal, and that sentence is
-      // more use than "FunctionsHttpError". The status goes on the end because
-      // it separates causes that read identically: a 401 is the gateway
-      // refusing before the function ran, a 400 is the function's own URL
-      // check, a 404 is the row not being readable as this user.
-      let msg = error.message;
-      let status = error.context?.status ?? '';
+
+    if (!res.ok) {
+      let msg = `The recording could not be loaded (HTTP ${res.status}).`;
       try {
-        const body = await error.context?.json?.();
-        if (body?.error) msg = body.error;
-      } catch { /* keep the generic one */ }
-      // Logged as well as shown: the inline text is narrow, and this is the
-      // one failure where the exact wording decides which branch to fix.
-      console.error('[recording]', status, msg, error);
-      setErr(status ? `${msg} (HTTP ${status})` : msg);
+        const body = await res.json();
+        if (body?.error) msg = `${body.error} (HTTP ${res.status})`;
+      } catch { /* not JSON; the status is what there is */ }
+      console.error('[recording]', res.status, msg);
+      setErr(msg);
       return;
     }
-    if (!data) { setErr('The function returned nothing at all.'); return; }
-    if (!(data instanceof Blob)) {
-      // supabase-js picks a parser from the response Content-Type. Anything
-      // but a Blob here means the audio came back labelled as something else,
-      // and createObjectURL would fail with a far less useful message.
-      setErr(`Expected audio, got ${typeof data}. ${String(data).slice(0, 120)}`);
-      return;
-    }
-    setSrc(URL.createObjectURL(data));
+
+    const blob = await res.blob();
+    if (!blob.size) { setErr('The recording came back empty.'); return; }
+    setSrc(URL.createObjectURL(blob));
   }
 
   if (err) return <span className="fine" style={{ color: '#a11b0f' }}>{err}</span>;
