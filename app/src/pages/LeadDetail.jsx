@@ -16,7 +16,7 @@ import { MAX_BODY, deliveryState, explainRefusal, refusalFrom } from '../lib/sms
 import { TEAM_ID } from '../lib/team.js';
 import {
   STATUSES, TEMPERATURES, OCCUPANCY,
-  titleize, formatPhone, fullAddress, fullDate, timeAgo, sourceLabel
+  titleize, formatPhone, fullAddress, fullDate, timeAgo, sourceLabel, personAndPlace
 } from '../lib/format.js';
 import './lead-comms.css';
 import './delivery-status.css';
@@ -379,7 +379,10 @@ export default function LeadDetail({ id }) {
     <>
       <header>
         <h1>{lead.address || lead.name || 'Lead'}</h1>
-        <span className="count">{fullAddress(lead)}</span>
+        {/* The seller, not the street again. fullAddress() opens with the
+            address, so this line used to repeat the h1 word for word and left
+            the name — the thing you want before dialling — nowhere on screen. */}
+        <span className="count">{personAndPlace(lead)}</span>
       </header>
 
       {err && <div className="err">{err}</div>}

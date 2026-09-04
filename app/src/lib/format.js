@@ -89,6 +89,26 @@ export function formatPhone(v) {
   return `(${ten.slice(0, 3)}) ${ten.slice(3, 6)}-${ten.slice(6)}`;
 }
 
+/**
+ * The line that sits under a record's title, when the title is the address.
+ *
+ * fullAddress() opens with the street, so putting it beneath an <h1> that is
+ * already the street printed the same words twice — once bold, once faint,
+ * inches apart — and left the one thing an operator actually wants before
+ * picking up the phone, the seller's name, off the screen entirely.
+ *
+ * Name first. The street is deliberately dropped: it is directly above.
+ */
+export function personAndPlace(lead) {
+  const who = String(lead?.name ?? lead?.owner_name ?? '').trim();
+  const cityState = [lead?.city, lead?.state].filter(Boolean).join(', ');
+  const place = [cityState, lead?.zip].filter(Boolean).join(' ');
+  // "No name yet" rather than silence: a blank where a name goes reads as a
+  // page that failed to load, and on a bought list an unnamed lead is the
+  // ordinary case, not a fault.
+  return [who || 'No name yet', place].filter(Boolean).join(' · ');
+}
+
 export function fullAddress(lead) {
   const tail = [lead.city, lead.state].filter(Boolean).join(', ');
   return [lead.address, tail, lead.zip].filter(Boolean).join(' · ');

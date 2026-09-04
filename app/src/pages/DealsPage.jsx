@@ -104,7 +104,9 @@ export default function DealsPage() {
 
   const load = useCallback(async () => {
     const [d, b, i] = await Promise.all([
-      supabase.from('deals').select('*', { count: 'exact' })
+      // The seller's name comes with the deal. A board of addresses makes you
+      // open a card to find out who you are about to ring.
+      supabase.from('deals').select('*, lead:leads(name)', { count: 'exact' })
         .eq('trashed', false)
         .order('created_at', { ascending: false }).limit(DEAL_CAP),
       // Only what a card and the buyer column need. The buyers page owns the
@@ -326,6 +328,7 @@ function DealCard({ deal, buyerName, sel }) {
       </label>
       <strong>{deal.address}</strong>
       <span className="sub">
+        {deal.lead?.name ? `${deal.lead.name} · ` : ''}
         {[[deal.city, deal.state].filter(Boolean).join(', '), deal.zip].filter(Boolean).join(' ') || '—'}
       </span>
 

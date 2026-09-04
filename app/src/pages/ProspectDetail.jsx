@@ -177,6 +177,7 @@ export default function ProspectDetail({ id }) {
       <div className="pr-head">
         <h1>{p.address || p.owner_name || 'Untitled prospect'}</h1>
         <span className="pr-sub">
+          {p.owner_name && <><strong>{p.owner_name}</strong>{' · '}</>}
           {[[p.city, p.state].filter(Boolean).join(', '), p.zip].filter(Boolean).join(' ')}
           {p.list?.name && ` · ${p.list.name}`}
           {p.list?.source_vendor && ` · ${p.list.source_vendor}`}
