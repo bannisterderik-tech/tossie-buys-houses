@@ -259,7 +259,15 @@ export default function PhotoGallery({ subject, subjectId, teamId, canEdit }) {
             accept="image/*"
             multiple
             hidden
-            onChange={(e) => { const f = e.target.files; e.target.value = ''; upload(f); }}
+            // Copied before the reset, not after. e.target.files is a live
+            // FileList owned by the input, so clearing value to allow the same
+            // file to be re-picked empties the list we are holding — and
+            // upload() then sees nothing at all.
+            onChange={(e) => {
+              const chosen = Array.from(e.target.files ?? []);
+              e.target.value = '';
+              upload(chosen);
+            }}
           />
         )}
 
