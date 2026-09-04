@@ -816,6 +816,15 @@ function storageHint(error) {
   // someone writes them, so a correctly-created private bucket still refuses
   // every upload — and the obvious cure, a policy of `true`, is the one that
   // makes every contract on the project readable by any signed-in user.
+  // The one an operator actually hits. A bucket with an allowed_mime_types list
+  // refuses on the type the BROWSER reported, and a .docx dragged out of some
+  // apps arrives as an empty string or application/octet-stream — so a real
+  // purchase agreement gets refused and Supabase says so in a sentence about
+  // MIME types, which reads like a fault in the app rather than a setting.
+  if (/mime|content type|not supported|invalid_mime/i.test(msg)) {
+    return `Storage refused that file type (${msg}). The "${BUCKET}" bucket has an allowed_mime_types list, and browsers report some Word files as octet-stream. Clearing that list — set allowed_mime_types to null — accepts anything; who may upload is already controlled by the storage policies and deals.edit, so the list was not buying much.`;
+  }
+
   if (/row-level security|policy|not authorized|Unauthorized/i.test(msg)) {
     return `Storage refused this (${msg}). The "${BUCKET}" bucket needs policies on storage.objects for the authenticated role, scoped to this team — the object key starts with the team id for exactly that, so match on the first path segment. Do not write a policy of USING (true): that makes every purchase agreement on the project readable by anyone who can sign in.`;
   }
