@@ -32,6 +32,31 @@ const THUMB_EDGE = 480;
  */
 const RESIZABLE = /^image\/(jpeg|png|webp)$/i;
 
+/**
+ * What the extension says the file is, for the very common case where the
+ * browser says nothing at all.
+ *
+ * A File does not always carry a type. Dragged out of another tab, off the
+ * macOS screenshot thumbnail, out of Photos, or picked on a machine with no
+ * handler registered for the format, `file.type` is the empty string — and a
+ * bucket with an allowed_mime_types list refuses application/octet-stream, so
+ * a perfectly ordinary .jpg was being turned away for saying nothing about
+ * itself. The name is the only other thing we know, so we use it.
+ */
+const MIME_BY_EXT = {
+  jpg: 'image/jpeg', jpeg: 'image/jpeg', jpe: 'image/jpeg',
+  png: 'image/png', webp: 'image/webp', gif: 'image/gif',
+  heic: 'image/heic', heif: 'image/heif', avif: 'image/avif',
+  bmp: 'image/bmp', tif: 'image/tiff', tiff: 'image/tiff',
+};
+
+/** True for anything we are willing to treat as a photo of a house. */
+export function looksLikeAnImage(file) {
+  if (/^image\//i.test(file.type || '')) return true;
+  const ext = (file.name?.split('.').pop() || '').toLowerCase();
+  return Object.prototype.hasOwnProperty.call(MIME_BY_EXT, ext);
+}
+
 export const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
 
 async function decode(file) {
@@ -84,11 +109,11 @@ export async function prepareImage(file) {
     thumb: null,
     width: null,
     height: null,
-    // Named rather than trusted, because a .heic picked on a machine that has
-    // no handler for it arrives with an empty type — and the bucket only
-    // accepts an image/* list, so sending application/octet-stream would have
-    // the upload refused for a file that is perfectly acceptable.
-    mime: file.type || (ext === 'heic' || ext === 'heif' ? `image/${ext}` : 'application/octet-stream'),
+    // The extension outranks an empty type, and outranks octet-stream too:
+    // a browser that hands over application/octet-stream for a file named
+    // .jpg is guessing worse than we are, and the bucket's allowed_mime_types
+    // list refuses that guess outright.
+    mime: pickMime(file, ext),
     ext,
   };
 
@@ -114,4 +139,13 @@ export async function prepareImage(file) {
     // A decode failure is not an upload failure. Send the original.
     return untouched;
   }
+}
+
+/**
+ * The browser's type when it has one worth having, the extension otherwise.
+ */
+function pickMime(file, ext) {
+  const claimed = (file.type || '').toLowerCase();
+  if (claimed.startsWith('image/')) return claimed;
+  return MIME_BY_EXT[ext] || claimed || 'application/octet-stream';
 }

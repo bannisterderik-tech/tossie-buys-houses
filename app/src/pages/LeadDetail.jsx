@@ -562,7 +562,7 @@ export default function LeadDetail({ id }) {
           {/* Directly under the property, because that is what they are of.
               A lead's photos are the condition evidence an operator gathers
               before there is a contract, and they carry into the deal on their
-
+              own — so this is the same gallery the deal shows, not a copy. */}
           <PhotoGallery subject="lead" subjectId={id} teamId={lead.team_id} />
 
           {/* Directly under the gallery, because the photos this produces land

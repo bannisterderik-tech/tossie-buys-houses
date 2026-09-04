@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '../supabase.js';
 import { useCan } from '../lib/capabilities.jsx';
-import { prepareImage, MAX_UPLOAD_BYTES } from '../lib/images.js';
+import { prepareImage, looksLikeAnImage, MAX_UPLOAD_BYTES } from '../lib/images.js';
 import './photo-gallery.css';
 
 /**
@@ -97,10 +97,22 @@ export default function PhotoGallery({ subject, subjectId, teamId, canEdit }) {
   }, [open, photos.length]);
 
   async function upload(files) {
-    const list = Array.from(files ?? []).filter((f) => /^image\//i.test(f.type) || /\.hei[cf]$/i.test(f.name));
-    if (list.length === 0) return;
-
     setErr(null);
+    const picked = Array.from(files ?? []);
+    const list = picked.filter(looksLikeAnImage);
+    // Silence was the worst version of this. Dropping a folder, or a file the
+    // browser could not describe, filtered everything out and returned — the
+    // drop zone lit up, nothing uploaded, and no reason was ever given.
+    if (list.length === 0) {
+      setErr(picked.length
+        ? `Nothing there we could read as a photo${picked.length === 1 ? ` (${picked[0].name})` : ''}. JPG, PNG, WEBP, HEIC and GIF all work; folders and shortcuts do not — open the folder and select the files inside it.`
+        : 'Nothing came through in that drop. Some apps hand over a link rather than the file; try saving the photo first, or use the button to choose it.');
+      return;
+    }
+    if (list.length < picked.length) {
+      setErr(`${picked.length - list.length} of ${picked.length} skipped — not photos.`);
+    }
+
     const { data: who } = await supabase.auth.getUser();
     const base = photos.reduce((m, p) => Math.max(m, p.position ?? 0), -1) + 1;
     const failures = [];
